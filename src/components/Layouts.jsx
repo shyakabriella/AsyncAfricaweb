@@ -162,7 +162,7 @@ export default function Layouts() {
 
           <div className="mt-10 flex flex-col gap-3 border-t border-white/10 pt-6 text-sm text-gray-400 sm:flex-row sm:items-center sm:justify-between">
             <p>© {new Date().getFullYear()} AsyncAfrica. All rights reserved.</p>
-            <p className="text-[#7A6CF5]">Built with innovation for Africa 🚀</p>
+            <p className="text-[#7A6CF5]">Built with innovation for Africa </p>
           </div>
         </div>
       </footer>
