@@ -185,12 +185,12 @@ export default function NavHeader() {
           <div className="flex flex-wrap items-center gap-6 text-[13px]">
             <a href="#location" className="flex items-center gap-2 transition hover:text-[#6050F0]">
               <PinIcon />
-              <span>Find A Location</span>
+              <span>Find Our  Location</span>
             </a>
 
             <a href="tel:+250123456789" className="flex items-center gap-2 transition hover:text-[#6050F0]">
               <PhoneIcon />
-              <span>+250123456789</span>
+              <span>+250 78 266 788 / +250 78 443 4216</span>
             </a>
 
             <a
@@ -198,7 +198,7 @@ export default function NavHeader() {
               className="flex items-center gap-2 transition hover:text-[#6050F0]"
             >
               <MailIcon />
-              <span>example@gmail.com</span>
+              <span>asyncafrica@gmail.com</span>
             </a>
           </div>
 
@@ -213,10 +213,7 @@ export default function NavHeader() {
               <span>Login</span>
             </Link>
 
-            <Link to="/dashboard" className="flex items-center gap-2 transition hover:text-[#6050F0]">
-              <UserIcon />
-              <span>My Dashboard</span>
-            </Link>
+            
           </div>
         </div>
       </div>
