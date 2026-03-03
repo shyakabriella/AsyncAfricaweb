@@ -306,8 +306,8 @@ export default function Wellcome() {
                       </svg>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-400">Powered by</p>
-                      <h4 className="text-base font-bold text-white">Smart Innovation</h4>
+                      <p className="text-xs text-gray-400">With AsyncAfrica we offer You</p>
+                      <h4 className="text-base font-bold text-white">Smart Innovation </h4>
                     </div>
                   </div>
                 </div>
