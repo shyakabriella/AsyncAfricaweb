@@ -208,10 +208,10 @@ export default function NavHeader() {
               <span>Register</span>
             </Link>
 
-            <Link to="/login" className="flex items-center gap-2 transition hover:text-[#6050F0]">
+            {/* <Link to="/login" className="flex items-center gap-2 transition hover:text-[#6050F0]">
               <UserIcon />
               <span>Login</span>
-            </Link>
+            </Link> */}
 
             
           </div>
