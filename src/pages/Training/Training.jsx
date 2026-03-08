@@ -23,17 +23,22 @@ function makeSlug(value) {
 
 function normalizeProgram(item) {
   const title = item?.name || item?.title || "Training Program";
+  const description =
+    item?.description ||
+    item?.intro ||
+    "Learn practical and career-ready skills through hands-on training.";
 
   return {
     id: item?.id || null,
     title,
     slug: item?.slug || makeSlug(title) || String(item?.id || ""),
-    description:
-      item?.description ||
-      item?.intro ||
-      "Learn practical and career-ready skills through hands-on training.",
+    description,
+    shortDescription:
+      description.length > 90
+        ? `${description.slice(0, 90).trim()}...`
+        : description,
     tag: item?.badge || item?.category || "Training",
-    category: item?.category || "",
+    category: item?.category || "General",
     iconKey: item?.icon_key || "",
     status: item?.status || "Draft",
   };
@@ -48,7 +53,7 @@ function getProgramIcon(iconKey, slug, category) {
     key.includes("development")
   ) {
     return (
-      <svg viewBox="0 0 24 24" fill="currentColor" className="h-7 w-7">
+      <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
         <path d="M8.7 16.6 4.1 12l4.6-4.6L7.3 6 1.3 12l6 6 1.4-1.4Zm6.6 0 1.4 1.4 6-6-6-6-1.4 1.4 4.6 4.6-4.6 4.6Z" />
       </svg>
     );
@@ -56,7 +61,7 @@ function getProgramIcon(iconKey, slug, category) {
 
   if (key.includes("network")) {
     return (
-      <svg viewBox="0 0 24 24" fill="currentColor" className="h-7 w-7">
+      <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
         <path d="M4 6h6V2H4v4Zm10 16h6v-4h-6v4ZM4 22h6v-4H4v4Zm10-8h6v-4h-6v4ZM7 8v3h10V8h2v5h-6v3h-2v-3H5V8h2Z" />
       </svg>
     );
@@ -68,7 +73,7 @@ function getProgramIcon(iconKey, slug, category) {
     key.includes("intelligence")
   ) {
     return (
-      <svg viewBox="0 0 24 24" fill="currentColor" className="h-7 w-7">
+      <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
         <path d="M12 2a3 3 0 0 1 3 3v1.1A5 5 0 0 1 18 11v2a5 5 0 0 1-4 4.9V21h-4v-3.1A5 5 0 0 1 6 13v-2a5 5 0 0 1 3-4.9V5a3 3 0 0 1 3-3Zm-3 9v2a3 3 0 1 0 6 0v-2a3 3 0 1 0-6 0ZM5 10H2v2h3v-2Zm17 0h-3v2h3v-2ZM4.2 5.6 2.8 7l2.1 2.1 1.4-1.4L4.2 5.6Zm15.6 0-2.1 2.1 1.4 1.4L21.2 7l-1.4-1.4Z" />
       </svg>
     );
@@ -76,7 +81,7 @@ function getProgramIcon(iconKey, slug, category) {
 
   if (key.includes("iot")) {
     return (
-      <svg viewBox="0 0 24 24" fill="currentColor" className="h-7 w-7">
+      <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
         <path d="M12 3a9 9 0 0 1 9 9h-2a7 7 0 1 0-14 0H3a9 9 0 0 1 9-9Zm0 4a5 5 0 0 1 5 5h-2a3 3 0 1 0-6 0H7a5 5 0 0 1 5-5Zm-2 8h4v6h-4v-6Z" />
       </svg>
     );
@@ -84,7 +89,7 @@ function getProgramIcon(iconKey, slug, category) {
 
   if (key.includes("robot")) {
     return (
-      <svg viewBox="0 0 24 24" fill="currentColor" className="h-7 w-7">
+      <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
         <path d="M9 2h6v2h-2v2.1A6 6 0 0 1 18 12v5a3 3 0 0 1-3 3h-1v2h-4v-2H9a3 3 0 0 1-3-3v-5a6 6 0 0 1 5-5.9V4H9V2Zm-1 9v6a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-6a4 4 0 1 0-8 0Zm2 1h2v2h-2v-2Zm4 0h2v2h-2v-2Z" />
       </svg>
     );
@@ -92,16 +97,120 @@ function getProgramIcon(iconKey, slug, category) {
 
   if (key.includes("security") || key.includes("cyber")) {
     return (
-      <svg viewBox="0 0 24 24" fill="currentColor" className="h-7 w-7">
+      <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
         <path d="M12 2 4 5v6c0 5.2 3.4 10 8 11 4.6-1 8-5.8 8-11V5l-8-3Zm0 10a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm3 5H9v-1a3 3 0 1 1 6 0v1Z" />
       </svg>
     );
   }
 
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className="h-7 w-7">
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
       <path d="M12 3 2 8l10 5 10-5-10-5Zm-7 9v4c0 1.7 3.1 3 7 3s7-1.3 7-3v-4l-7 3.5L5 12Z" />
     </svg>
+  );
+}
+
+function getStatusClasses(status) {
+  if (status === "Active") {
+    return "border-emerald-400/20 bg-emerald-400/10 text-emerald-200";
+  }
+
+  if (status === "Draft") {
+    return "border-amber-400/20 bg-amber-400/10 text-amber-200";
+  }
+
+  return "border-slate-400/20 bg-slate-400/10 text-slate-200";
+}
+
+function ProgramCard({ item, expanded, onToggle }) {
+  return (
+    <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] p-3 shadow-[0_8px_24px_rgba(0,0,0,0.18)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:border-[#7A6CF5]/40 hover:bg-white/[0.07]">
+      <div className="absolute inset-0 bg-gradient-to-br from-[#6050F0]/10 via-transparent to-[#7A6CF5]/10 opacity-0 transition duration-500 group-hover:opacity-100" />
+
+      <div className="relative z-10 flex h-full flex-col">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex min-w-0 items-start gap-2.5">
+            <div className="mt-0.5 rounded-lg bg-[#6050F0]/15 p-2 text-[#c9c3ff]">
+              {getProgramIcon(item.iconKey, item.slug, item.category)}
+            </div>
+
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-gray-400">
+                {item.category}
+              </p>
+              <h3 className="mt-1 line-clamp-1 text-sm font-bold text-white sm:text-base">
+                {item.title}
+              </h3>
+            </div>
+          </div>
+
+          <span
+            className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getStatusClasses(
+              item.status
+            )}`}
+          >
+            {item.status}
+          </span>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <span className="rounded-full border border-[#7A6CF5]/20 bg-[#6050F0]/10 px-2 py-1 text-[10px] font-semibold text-[#d9d5ff]">
+            {item.tag}
+          </span>
+        </div>
+
+        <p className="mt-3 text-xs leading-5 text-gray-300">
+          {expanded ? item.description : item.shortDescription}
+        </p>
+
+        {expanded ? (
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-gray-200">
+              <span className="block text-[10px] uppercase tracking-[0.14em] text-gray-400">
+                Category
+              </span>
+              <span className="mt-1 block font-medium">{item.category}</span>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-gray-200">
+              <span className="block text-[10px] uppercase tracking-[0.14em] text-gray-400">
+                Status
+              </span>
+              <span className="mt-1 block font-medium">{item.status}</span>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="mt-4 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={onToggle}
+            className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-gray-200 transition hover:border-[#7A6CF5]/40 hover:bg-[#6050F0]/10"
+          >
+            {expanded ? "Show less" : "Show more"}
+            <svg
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              className={`h-3.5 w-3.5 transition ${
+                expanded ? "rotate-180" : ""
+              }`}
+            >
+              <path d="M12 15.5 5 8.5l1.4-1.4 5.6 5.6 5.6-5.6L19 8.5l-7 7Z" />
+            </svg>
+          </button>
+
+          <Link
+            to={`/training/${item.slug}`}
+            className="inline-flex items-center gap-1.5 rounded-full bg-[#6050F0] px-3 py-1.5 text-[11px] font-bold text-white transition hover:bg-[#7A6CF5]"
+          >
+            View
+            <svg viewBox="0 0 24 24" fill="currentColor" className="h-3.5 w-3.5">
+              <path d="M13.2 4.8 20.4 12l-7.2 7.2-1.4-1.4 4.8-4.8H3.6v-2h13l-4.8-4.8 1.4-1.4Z" />
+            </svg>
+          </Link>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -109,6 +218,7 @@ export default function Training() {
   const [programs, setPrograms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [expandedCard, setExpandedCard] = useState(null);
 
   useEffect(() => {
     let ignore = false;
@@ -162,419 +272,269 @@ export default function Training() {
   }, []);
 
   const programCount = useMemo(() => programs.length, [programs]);
+  const activeCount = useMemo(
+    () => programs.filter((item) => item.status === "Active").length,
+    [programs]
+  );
+  const categoryCount = useMemo(
+    () => new Set(programs.map((item) => item.category).filter(Boolean)).size,
+    [programs]
+  );
 
   return (
-    <>
-      <style>{`
-        @keyframes fadeUp {
-          0% {
-            opacity: 0;
-            transform: translateY(40px);
-          }
-          100% {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
+    <section className="relative min-h-screen overflow-hidden bg-[#05060b] text-white">
+      <div className="absolute inset-0">
+        <img
+          src="/hero-tech.jpg"
+          alt="AsyncAfrica Training"
+          className="h-full w-full object-cover object-center opacity-10"
+        />
+        <div className="absolute inset-0 bg-black/85" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(122,108,245,0.16),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(96,80,240,0.12),transparent_32%)]" />
+      </div>
 
-        @keyframes fadeRight {
-          0% {
-            opacity: 0;
-            transform: translateX(-40px);
-          }
-          100% {
-            opacity: 1;
-            transform: translateX(0);
-          }
-        }
+      <div className="absolute left-[-70px] top-20 h-52 w-52 rounded-full bg-[#6050F0]/20 blur-3xl" />
+      <div className="absolute bottom-0 right-[-60px] h-64 w-64 rounded-full bg-[#7A6CF5]/15 blur-3xl" />
 
-        @keyframes fadeLeft {
-          0% {
-            opacity: 0;
-            transform: translateX(40px);
-          }
-          100% {
-            opacity: 1;
-            transform: translateX(0);
-          }
-        }
+      <div className="relative z-10 mx-auto max-w-7xl px-4 pb-12 pt-16 sm:px-6 lg:px-8">
+        <div className="grid items-start gap-6 lg:grid-cols-[1.2fr_0.8fr] lg:gap-8">
+          <div className="max-w-3xl">
+            <span className="inline-flex items-center rounded-full border border-[#7A6CF5]/20 bg-[#6050F0]/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#d7d2ff]">
+              AsyncAfrica Training Hub
+            </span>
 
-        @keyframes floatY {
-          0%, 100% {
-            transform: translateY(0px);
-          }
-          50% {
-            transform: translateY(-12px);
-          }
-        }
-
-        @keyframes pulseGlow {
-          0%, 100% {
-            box-shadow: 0 0 0 rgba(96, 80, 240, 0.0);
-          }
-          50% {
-            box-shadow: 0 0 30px rgba(96, 80, 240, 0.35);
-          }
-        }
-
-        @keyframes zoomBg {
-          0% {
-            transform: scale(1);
-          }
-          100% {
-            transform: scale(1.08);
-          }
-        }
-
-        @keyframes scrollDot {
-          0% {
-            opacity: 0;
-            transform: translateY(0);
-          }
-          50% {
-            opacity: 1;
-            transform: translateY(8px);
-          }
-          100% {
-            opacity: 0;
-            transform: translateY(16px);
-          }
-        }
-
-        .animate-fade-up {
-          animation: fadeUp 0.9s ease forwards;
-        }
-
-        .animate-fade-right {
-          animation: fadeRight 0.9s ease forwards;
-        }
-
-        .animate-fade-left {
-          animation: fadeLeft 0.9s ease forwards;
-        }
-
-        .animate-float {
-          animation: floatY 4s ease-in-out infinite;
-        }
-
-        .animate-glow {
-          animation: pulseGlow 3.5s ease-in-out infinite;
-        }
-
-        .animate-bg {
-          animation: zoomBg 12s ease-in-out infinite alternate;
-        }
-
-        .scroll-dot {
-          animation: scrollDot 1.8s infinite;
-        }
-      `}</style>
-
-      <section className="relative min-h-screen overflow-hidden bg-black text-white">
-        <div className="absolute inset-0">
-          <img
-            src="/hero-tech.jpg"
-            alt="AsyncAfrica Training"
-            className="animate-bg h-full w-full object-cover object-center opacity-20"
-          />
-          <div className="absolute inset-0 bg-black/80" />
-          <div className="absolute inset-0 bg-gradient-to-r from-black via-black/75 to-[#6050F0]/20" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(122,108,245,0.25),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(96,80,240,0.2),transparent_35%)]" />
-        </div>
-
-        <div className="absolute left-[-80px] top-40 h-72 w-72 rounded-full bg-[#6050F0]/20 blur-3xl" />
-        <div className="absolute bottom-10 right-[-60px] h-80 w-80 rounded-full bg-[#7A6CF5]/20 blur-3xl" />
-        <div className="absolute right-[20%] top-[15%] h-20 w-20 rounded-full bg-[#6050F0]/30 blur-2xl" />
-
-        <div className="absolute inset-0 opacity-[0.07]">
-          <div
-            className="h-full w-full"
-            style={{
-              backgroundImage:
-                "linear-gradient(rgba(255,255,255,0.18) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.18) 1px, transparent 1px)",
-              backgroundSize: "40px 40px",
-            }}
-          />
-        </div>
-
-        <div className="relative z-10 mx-auto max-w-7xl px-4 pb-16 pt-32 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-4xl text-center">
-            <h1
-              className="animate-fade-up text-4xl font-black leading-tight sm:text-5xl lg:text-7xl"
-              style={{ animationDelay: "0.2s" }}
-            >
+            <h1 className="mt-4 text-2xl font-black leading-tight sm:text-4xl lg:text-5xl">
               Explore Our
-              <span className="block bg-gradient-to-r from-[#6050F0] via-[#7A6CF5] to-white bg-clip-text text-transparent">
+              <span className="block bg-gradient-to-r from-[#6050F0] via-[#8d82ff] to-white bg-clip-text text-transparent">
                 Training Programs
               </span>
             </h1>
 
-            <p
-              className="animate-fade-up mx-auto mt-6 max-w-3xl text-base leading-8 text-gray-300 sm:text-lg"
-              style={{ animationDelay: "0.35s" }}
-            >
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-gray-300 sm:text-base">
               Start your journey with AsyncAfrica through practical internship
-              and training opportunities in different technology fields. Choose
-              your path, build hands-on skills, and grow with real innovation.
+              and training opportunities in technology. Choose the right path,
+              learn useful skills, and grow with real-world experience.
             </p>
 
-            <div
-              className="animate-fade-up mt-8 flex flex-wrap justify-center gap-3"
-              style={{ animationDelay: "0.5s" }}
-            >
+            <div className="mt-5 flex flex-wrap gap-2">
               {[
                 "Real Projects",
-                "Professional Mentorship",
+                "Mentorship",
                 "Hands-on Learning",
                 "Career Growth",
-                "Innovation",
-                "Future Skills",
               ].map((item) => (
                 <span
                   key={item}
-                  className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-gray-200 backdrop-blur-sm transition hover:border-[#7A6CF5]/40 hover:bg-[#6050F0]/10"
+                  className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-gray-200"
                 >
                   {item}
                 </span>
               ))}
             </div>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link
+                to="/contact"
+                className="inline-flex items-center justify-center rounded-full bg-[#6050F0] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#7A6CF5]"
+              >
+                Apply for Training
+              </Link>
+
+              <Link
+                to="/services"
+                className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-bold text-white transition hover:border-[#7A6CF5] hover:bg-[#6050F0]/10"
+              >
+                Explore Services
+              </Link>
+            </div>
           </div>
 
-          {error ? (
-            <div className="mt-12 rounded-3xl border border-rose-500/20 bg-rose-500/10 px-6 py-5 text-center text-sm text-rose-100">
-              {error}
-            </div>
-          ) : null}
-
-          {loading ? (
-            <div className="mt-16 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-              {Array.from({ length: 6 }).map((_, index) => (
-                <div
-                  key={index}
-                  className="animate-fade-up rounded-[28px] border border-white/10 bg-white/5 p-6 backdrop-blur-xl"
-                  style={{ animationDelay: `${0.1 * (index + 1)}s` }}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="h-16 w-16 rounded-2xl bg-white/10" />
-                    <div className="h-7 w-24 rounded-full bg-white/10" />
-                  </div>
-                  <div className="mt-6 h-8 w-2/3 rounded bg-white/10" />
-                  <div className="mt-4 h-4 w-full rounded bg-white/10" />
-                  <div className="mt-2 h-4 w-5/6 rounded bg-white/10" />
-                  <div className="mt-6 h-2 w-full rounded-full bg-white/10" />
-                  <div className="mt-6 h-5 w-28 rounded bg-white/10" />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-16 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-              {programs.map((item, index) => (
-                <Link
-                  key={item.id || item.slug}
-                  to={`/training/${item.slug}`}
-                  className="animate-fade-up group relative overflow-hidden rounded-[28px] border border-white/10 bg-white/5 p-6 backdrop-blur-xl transition duration-300 hover:-translate-y-2 hover:border-[#7A6CF5]/50 hover:bg-white/[0.08]"
-                  style={{ animationDelay: `${0.12 * (index + 1)}s` }}
-                >
-                  <div className="absolute inset-0 bg-gradient-to-br from-[#6050F0]/10 via-transparent to-[#7A6CF5]/10 opacity-0 transition duration-500 group-hover:opacity-100" />
-
-                  <div className="relative z-10">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="animate-glow rounded-2xl bg-[#6050F0]/20 p-4 text-[#7A6CF5]">
-                        {getProgramIcon(item.iconKey, item.slug, item.category)}
-                      </div>
-                      <span className="rounded-full border border-[#7A6CF5]/20 bg-[#6050F0]/10 px-3 py-1 text-xs font-semibold text-[#c9c3ff]">
-                        {item.tag}
-                      </span>
-                    </div>
-
-                    <h3 className="mt-6 text-2xl font-bold text-white">
-                      {item.title}
-                    </h3>
-
-                    <p className="mt-4 text-sm leading-7 text-gray-300">
-                      {item.description}
-                    </p>
-
-                    <div className="mt-6 h-2 overflow-hidden rounded-full bg-white/10">
-                      <div className="h-full w-[82%] rounded-full bg-gradient-to-r from-[#6050F0] to-[#7A6CF5]" />
-                    </div>
-
-                    <div className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#c9c3ff]">
-                      View program
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                        className="h-4 w-4 transition group-hover:translate-x-1"
-                      >
-                        <path d="M13.2 4.8 20.4 12l-7.2 7.2-1.4-1.4 4.8-4.8H3.6v-2h13l-4.8-4.8 1.4-1.4Z" />
-                      </svg>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-
-          {!loading && !error && programs.length === 0 ? (
-            <div className="mt-12 rounded-3xl border border-white/10 bg-white/5 px-6 py-10 text-center backdrop-blur-xl">
-              <h3 className="text-2xl font-bold text-white">
-                No training programs yet
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-xl">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-gray-400">
+                Programs
+              </p>
+              <h3 className="mt-2 text-xl font-black text-white">
+                {String(programCount).padStart(2, "0")}
               </h3>
-              <p className="mt-3 text-gray-300">
-                Training programs will appear here once they are added in the
-                system.
-              </p>
             </div>
-          ) : null}
 
-          <div className="mt-20 grid items-center gap-10 lg:grid-cols-2">
-            <div className="animate-fade-right max-w-2xl">
-              <h2 className="text-3xl font-black text-white sm:text-4xl">
-                Learn. Build. Grow.
-              </h2>
-              <p className="mt-5 text-base leading-8 text-gray-300 sm:text-lg">
-                Our programs are designed for students and young professionals
-                who want to gain practical skills in technology. Every training
-                field gives you a chance to learn from real work and professional
-                guidance.
+            <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-xl">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-gray-400">
+                Active
               </p>
+              <h3 className="mt-2 text-xl font-black text-white">
+                {String(activeCount).padStart(2, "0")}
+              </h3>
+            </div>
 
-              <div className="mt-8 flex flex-col gap-4 sm:flex-row">
-                <Link
-                  to="/contact"
-                  className="animate-glow inline-flex items-center justify-center rounded-full bg-[#6050F0] px-8 py-4 text-sm font-bold text-white transition duration-300 hover:-translate-y-1 hover:bg-[#7A6CF5]"
-                >
-                  Apply for Training
-                </Link>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-xl">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-gray-400">
+                Categories
+              </p>
+              <h3 className="mt-2 text-xl font-black text-white">
+                {String(categoryCount).padStart(2, "0")}
+              </h3>
+            </div>
+          </div>
+        </div>
 
-                <Link
-                  to="/services"
-                  className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 px-8 py-4 text-sm font-bold text-white transition duration-300 hover:-translate-y-1 hover:border-[#7A6CF5] hover:bg-[#6050F0]/10"
-                >
-                  Explore Services
-                </Link>
+        {error ? (
+          <div className="mt-8 rounded-2xl border border-rose-500/20 bg-rose-500/10 px-5 py-4 text-center text-sm text-rose-100">
+            {error}
+          </div>
+        ) : null}
+
+        <div className="mt-8 flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-bold text-white sm:text-2xl">
+              Available Programs
+            </h2>
+            <p className="mt-1 text-sm text-gray-400">
+              Small cards with few details first. Click{" "}
+              <span className="font-semibold text-gray-200">Show more</span> to
+              open extra content.
+            </p>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div
+                key={index}
+                className="rounded-2xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-xl"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="h-9 w-9 rounded-lg bg-white/10" />
+                  <div className="h-5 w-14 rounded-full bg-white/10" />
+                </div>
+                <div className="mt-3 h-4 w-2/3 rounded bg-white/10" />
+                <div className="mt-2 h-3 w-full rounded bg-white/10" />
+                <div className="mt-2 h-3 w-4/5 rounded bg-white/10" />
+                <div className="mt-4 h-7 w-24 rounded-full bg-white/10" />
               </div>
-            </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {programs.map((item) => (
+              <ProgramCard
+                key={item.id || item.slug}
+                item={item}
+                expanded={expandedCard === (item.id || item.slug)}
+                onToggle={() =>
+                  setExpandedCard((prev) =>
+                    prev === (item.id || item.slug)
+                      ? null
+                      : item.id || item.slug
+                  )
+                }
+              />
+            ))}
+          </div>
+        )}
 
-            <div className="relative hidden lg:block">
-              <div className="relative mx-auto h-[500px] w-full max-w-[500px]">
-                <div className="animate-fade-left absolute left-12 top-14 w-[360px] rounded-[28px] border border-white/10 bg-white/8 p-6 backdrop-blur-xl">
-                  <div className="mb-5 flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-300">AsyncAfrica Academy</p>
-                      <h3 className="mt-1 text-xl font-bold text-white">
-                        Training Dashboard
-                      </h3>
-                    </div>
-                    <div className="h-12 w-12 rounded-2xl bg-[#6050F0]/20 p-3 text-[#7A6CF5]">
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                        className="h-full w-full"
-                      >
-                        <path d="M12 3 1 9l11 6 9-4.91V17h2V9L12 3Zm-7 9.18V16l7 3.82L19 16v-3.82l-7 3.82-7-3.82Z" />
-                      </svg>
-                    </div>
-                  </div>
+        {!loading && !error && programs.length === 0 ? (
+          <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.05] px-6 py-8 text-center backdrop-blur-xl">
+            <h3 className="text-lg font-bold text-white">
+              No training programs yet
+            </h3>
+            <p className="mt-2 text-sm leading-6 text-gray-300">
+              Training programs will appear here once they are added in the
+              system.
+            </p>
+          </div>
+        ) : null}
 
-                  <div className="space-y-4">
-                    <div className="rounded-2xl bg-black/30 p-4">
-                      <div className="mb-3 flex items-center justify-between">
-                        <span className="text-sm text-gray-300">
-                          Enrollment Rate
-                        </span>
-                        <span className="text-sm font-bold text-[#7A6CF5]">
-                          +92%
-                        </span>
-                      </div>
-                      <div className="h-2 overflow-hidden rounded-full bg-white/10">
-                        <div className="h-full w-[92%] rounded-full bg-gradient-to-r from-[#6050F0] to-[#7A6CF5]" />
-                      </div>
-                    </div>
+        <div className="mt-10 grid gap-4 lg:grid-cols-[1fr_0.95fr]">
+          <div className="rounded-3xl border border-white/10 bg-white/[0.05] p-5 backdrop-blur-xl">
+            <h2 className="text-xl font-black text-white sm:text-2xl">
+              Learn. Build. Grow.
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-gray-300">
+              Our programs are made for students and young professionals who
+              want practical technology skills.
+            </p>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="rounded-2xl bg-black/30 p-4">
-                        <p className="text-xs uppercase tracking-wider text-gray-400">
-                          Programs
-                        </p>
-                        <h4 className="mt-2 text-2xl font-black text-white">
-                          {String(programCount).padStart(2, "0")}
-                        </h4>
-                      </div>
-
-                      <div className="rounded-2xl bg-black/30 p-4">
-                        <p className="text-xs uppercase tracking-wider text-gray-400">
-                          Mentors
-                        </p>
-                        <h4 className="mt-2 text-2xl font-black text-white">
-                          10+
-                        </h4>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl bg-black/30 p-4">
-                      <p className="text-sm text-gray-300">Top Skills</p>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {["Web", "Cloud", "AI", "IoT", "Security"].map((tag) => (
-                          <span
-                            key={tag}
-                            className="rounded-full bg-[#6050F0]/20 px-3 py-1 text-xs font-semibold text-[#c9c3ff]"
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="animate-float absolute left-0 top-0 w-60 rounded-3xl border border-white/10 bg-[#0f0f18]/80 p-5 backdrop-blur-xl">
-                  <div className="flex items-center gap-3">
-                    <div className="rounded-2xl bg-[#6050F0]/20 p-3 text-[#7A6CF5]">
-                      <svg viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6">
-                        <path d="M12 2 1 21h22L12 2Zm0 4.8L19.53 19H4.47L12 6.8ZM11 10v4h2v-4h-2Zm0 6v2h2v-2h-2Z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-400">Choose your path</p>
-                      <h4 className="text-base font-bold text-white">Future Skills</h4>
-                    </div>
-                  </div>
-                </div>
-
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {[
+                "Practical learning experience",
+                "Mentorship from professionals",
+                "Career-focused training paths",
+                "Useful technology skills",
+              ].map((point) => (
                 <div
-                  className="animate-float absolute bottom-14 right-2 w-64 rounded-3xl border border-white/10 bg-[#0f0f18]/80 p-5 backdrop-blur-xl"
-                  style={{ animationDelay: "1.2s" }}
+                  key={point}
+                  className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-gray-200"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="rounded-2xl bg-[#7A6CF5]/20 p-3 text-[#7A6CF5]">
-                      <svg viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6">
-                        <path d="M4 6h16v2H4V6Zm0 5h10v2H4v-2Zm0 5h16v2H4v-2Z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-400">Start today</p>
-                      <h4 className="text-base font-bold text-white">Join Training</h4>
-                    </div>
-                  </div>
+                  {point}
                 </div>
+              ))}
+            </div>
+          </div>
 
-                <div className="absolute right-12 top-10 h-20 w-20 rounded-full border border-[#7A6CF5]/30 bg-[#6050F0]/10 blur-[1px]" />
-                <div className="absolute bottom-0 left-16 h-28 w-28 rounded-full bg-[#6050F0]/15 blur-2xl" />
+          <div className="rounded-3xl border border-white/10 bg-white/[0.05] p-5 backdrop-blur-xl">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.18em] text-gray-400">
+                  Quick Snapshot
+                </p>
+                <h3 className="mt-1 text-lg font-bold text-white">
+                  Training Dashboard
+                </h3>
+              </div>
+
+              <div className="rounded-xl bg-[#6050F0]/15 p-2.5 text-[#c9c3ff]">
+                <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                  <path d="M12 3 1 9l11 6 9-4.91V17h2V9L12 3Zm-7 9.18V16l7 3.82L19 16v-3.82l-7 3.82-7-3.82Z" />
+                </svg>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="mb-2 flex items-center justify-between text-sm">
+                <span className="text-gray-300">Enrollment Readiness</span>
+                <span className="font-bold text-[#c9c3ff]">92%</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                <div className="h-full w-[92%] rounded-full bg-gradient-to-r from-[#6050F0] to-[#7A6CF5]" />
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-gray-400">
+                  Mentors
+                </p>
+                <h4 className="mt-2 text-lg font-black text-white">10+</h4>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-gray-400">
+                  Focus
+                </p>
+                <h4 className="mt-2 text-lg font-black text-white">
+                  Future Skills
+                </h4>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+              <p className="text-sm text-gray-300">Top Skills</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {["Web", "Cloud", "AI", "IoT", "Security"].map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-full bg-[#6050F0]/15 px-3 py-1 text-[11px] font-semibold text-[#d7d2ff]"
+                  >
+                    {tag}
+                  </span>
+                ))}
               </div>
             </div>
           </div>
         </div>
-
-        <div className="absolute bottom-8 left-1/2 z-10 hidden -translate-x-1/2 flex-col items-center lg:flex">
-          <span className="mb-3 text-xs uppercase tracking-[0.3em] text-gray-400">
-            Scroll
-          </span>
-          <div className="flex h-14 w-8 justify-center rounded-full border border-white/20">
-            <div className="scroll-dot mt-2 h-3 w-3 rounded-full bg-[#7A6CF5]" />
-          </div>
-        </div>
-      </section>
-    </>
+      </div>
+    </section>
   );
 }
