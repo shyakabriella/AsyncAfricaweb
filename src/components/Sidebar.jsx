@@ -111,6 +111,12 @@ export default function Sidebar({ open = true, onClose = () => {} }) {
               onClick={handleMobileClose}
             />
             <Item
+              to="/dashboard/applications"
+              label="Application"
+              icon={<IconApplication />}
+              onClick={handleMobileClose}
+            />
+            <Item
               to="/dashboard/internships"
               label="Internship"
               icon={<IconInternship />}
@@ -203,6 +209,24 @@ function IconProgram() {
       <path
         d="M12 3 2 8l10 5 8-4v6h2V8L12 3Zm-6 8.5V16l6 3 6-3v-4.5l-6 3-6-3Z"
         fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function IconApplication() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"
+        stroke="currentColor"
+        strokeWidth="2"
+      />
+      <path
+        d="M8 8h8M8 12h8M8 16h5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
       />
     </svg>
   );

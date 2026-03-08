@@ -10,6 +10,8 @@ import Services from "../pages/Services";
 import ServiceDetails from "../pages/ServiceDetails";
 import Training from "../pages/Training/Training";
 import TrainingDetails from "../pages/Training/TrainingDetails";
+import ApplicationReceived from "../pages/Training/ApplicationReceived";
+import ApplicationDetails from "../pages/Training/ApplicationDetails";
 import Projects from "../pages/Projects";
 import Contact from "../pages/Contact";
 
@@ -38,6 +40,8 @@ export default function AppRoutes() {
         <Route index element={<AdminDashboard />} />
         <Route path="programs" element={<Program />} />
         <Route path="programs/:id" element={<ProgramDetails />} />
+        <Route path="applications" element={<ApplicationReceived />} />
+        <Route path="applications/:id" element={<ApplicationDetails />} />
         <Route path="users" element={<UsersRoles />} />
         <Route path="service-directory" element={<ServiceDirectory />} />
         <Route path="settings" element={<SystemSetting />} />
