@@ -53,16 +53,20 @@ const samplePrograms = [
     tools: ["React", "Node.js", "MySQL", "Git", "Tailwind CSS"],
     shifts: [
       {
+        id: "shift-1",
         name: "Morning Shift",
         startTime: "08:00",
         endTime: "11:00",
         capacity: 25,
+        filled: 0,
       },
       {
+        id: "shift-2",
         name: "Afternoon Shift",
         startTime: "14:00",
         endTime: "17:00",
         capacity: 23,
+        filled: 0,
       },
     ],
     image: "",
@@ -115,10 +119,12 @@ const samplePrograms = [
     tools: ["Python", "Datasets", "AI Platforms", "Automation Tools"],
     shifts: [
       {
+        id: "shift-3",
         name: "Weekend Shift",
         startTime: "09:00",
         endTime: "12:00",
         capacity: 35,
+        filled: 0,
       },
     ],
     image: "",
@@ -220,10 +226,12 @@ const samplePrograms = [
     tools: ["Security Tools", "Protected Systems", "Risk Assessment"],
     shifts: [
       {
+        id: "shift-4",
         name: "Evening Shift",
         startTime: "17:30",
         endTime: "20:00",
         capacity: 21,
+        filled: 0,
       },
     ],
     image: "",
@@ -233,6 +241,38 @@ const samplePrograms = [
     is_active: true,
   },
 ];
+
+function makeShiftId() {
+  return `shift-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function parseJsonSafely(value, fallback = {}) {
+  try {
+    return value ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function buildErrorMessage(result) {
+  if (!result) return "Request failed.";
+
+  if (result?.errors && typeof result.errors === "object") {
+    const messages = Object.values(result.errors)
+      .flat()
+      .filter(Boolean);
+
+    if (messages.length) {
+      return messages.join("\n");
+    }
+  }
+
+  if (result?.error) {
+    return `${result.message || "Request failed."}\n${result.error}`;
+  }
+
+  return result?.message || "Request failed.";
+}
 
 function safeArray(value) {
   if (Array.isArray(value)) return value;
@@ -250,6 +290,17 @@ function safeArray(value) {
   }
 
   return [];
+}
+
+function normalizeShift(item, index = 0) {
+  return {
+    id: item?.id ?? `shift-${index + 1}`,
+    name: item?.name || item?.shift_name || item?.title || "",
+    startTime: item?.startTime || item?.start_time || "",
+    endTime: item?.endTime || item?.end_time || "",
+    capacity: Number(item?.capacity ?? item?.volume ?? item?.student_limit ?? 0),
+    filled: Number(item?.filled ?? item?.enrolled ?? item?.current_students ?? 0),
+  };
 }
 
 function safeShiftArray(value) {
@@ -271,16 +322,6 @@ function safeShiftArray(value) {
       (item) =>
         item.name || item.startTime || item.endTime || Number(item.capacity) > 0
     );
-}
-
-function normalizeShift(item, index = 0) {
-  return {
-    id: item?.id ?? `shift-${index + 1}`,
-    name: item?.name || item?.shift_name || item?.title || "",
-    startTime: item?.startTime || item?.start_time || "",
-    endTime: item?.endTime || item?.end_time || "",
-    capacity: Number(item?.capacity ?? item?.volume ?? item?.student_limit ?? 0),
-  };
 }
 
 function toDateInput(value) {
@@ -342,8 +383,7 @@ function normalizeProgram(item) {
     description: item.description || "",
     overview: item.overview || "",
     icon_key: item.icon_key || "",
-    is_active:
-      typeof item.is_active === "boolean" ? item.is_active : true,
+    is_active: typeof item.is_active === "boolean" ? item.is_active : true,
     objectives: safeArray(item.objectives),
     modules: safeArray(item.modules),
     skills: safeArray(item.skills),
@@ -379,10 +419,12 @@ function buildPayload(program) {
     outcomes: safeArray(program.outcomes),
     tools: safeArray(program.tools),
     shifts: safeShiftArray(program.shifts).map((shift) => ({
+      id: shift.id || "",
       name: shift.name || "",
       start_time: shift.startTime || "",
       end_time: shift.endTime || "",
       capacity: Number(shift.capacity || 0),
+      filled: Number(shift.filled || 0),
     })),
   };
 }
@@ -433,16 +475,10 @@ export default function ProgramDetails() {
         });
 
         const text = await response.text();
-        let result = {};
-
-        try {
-          result = text ? JSON.parse(text) : {};
-        } catch {
-          result = {};
-        }
+        const result = parseJsonSafely(text, {});
 
         if (!response.ok) {
-          throw new Error(result?.message || "Failed to load program.");
+          throw new Error(buildErrorMessage(result));
         }
 
         const data = normalizeProgram({
@@ -479,6 +515,7 @@ export default function ProgramDetails() {
       setError("");
 
       const endpointKey = program.id || id;
+      const payload = buildPayload(nextProgram);
 
       const response = await fetch(`${API_BASE_URL}/programs/${endpointKey}`, {
         method: "PUT",
@@ -487,20 +524,14 @@ export default function ProgramDetails() {
           Accept: "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify(buildPayload(nextProgram)),
+        body: JSON.stringify(payload),
       });
 
       const text = await response.text();
-      let result = {};
-
-      try {
-        result = text ? JSON.parse(text) : {};
-      } catch {
-        result = {};
-      }
+      const result = parseJsonSafely(text, {});
 
       if (!response.ok) {
-        throw new Error(result?.message || "Failed to update program.");
+        throw new Error(buildErrorMessage(result));
       }
 
       setProgram(
@@ -509,6 +540,7 @@ export default function ProgramDetails() {
           ...(result?.data || {}),
         })
       );
+
       closeAllModals();
     } catch (err) {
       setError(err.message || "Failed to update program.");
@@ -568,7 +600,7 @@ export default function ProgramDetails() {
   return (
     <div className="space-y-4 pb-6">
       {error ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
+        <div className="whitespace-pre-line rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
           {error}
         </div>
       ) : null}
@@ -1537,7 +1569,7 @@ function ShiftSettingsModal({
   onSave,
 }) {
   const [rows, setRows] = useState([
-    { name: "", startTime: "", endTime: "", capacity: "" },
+    { id: makeShiftId(), name: "", startTime: "", endTime: "", capacity: "", filled: 0 },
   ]);
 
   useEffect(() => {
@@ -1545,12 +1577,23 @@ function ShiftSettingsModal({
       setRows(
         shifts.length
           ? shifts.map((item) => ({
+              id: item.id || makeShiftId(),
               name: item.name || "",
               startTime: item.startTime || "",
               endTime: item.endTime || "",
               capacity: String(item.capacity ?? ""),
+              filled: Number(item.filled ?? 0),
             }))
-          : [{ name: "", startTime: "", endTime: "", capacity: "" }]
+          : [
+              {
+                id: makeShiftId(),
+                name: "",
+                startTime: "",
+                endTime: "",
+                capacity: "",
+                filled: 0,
+              },
+            ]
       );
     }
   }, [shifts, open]);
@@ -1571,7 +1614,14 @@ function ShiftSettingsModal({
   function addRow() {
     setRows((prev) => [
       ...prev,
-      { name: "", startTime: "", endTime: "", capacity: "" },
+      {
+        id: makeShiftId(),
+        name: "",
+        startTime: "",
+        endTime: "",
+        capacity: "",
+        filled: 0,
+      },
     ]);
   }
 
@@ -1584,10 +1634,12 @@ function ShiftSettingsModal({
 
     const cleaned = rows
       .map((item) => ({
+        id: item.id || makeShiftId(),
         name: item.name.trim(),
         startTime: item.startTime,
         endTime: item.endTime,
         capacity: Number(item.capacity || 0),
+        filled: Number(item.filled || 0),
       }))
       .filter(
         (item) =>
@@ -1608,7 +1660,7 @@ function ShiftSettingsModal({
         <div className="space-y-3">
           {rows.map((row, index) => (
             <div
-              key={index}
+              key={row.id}
               className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
             >
               <div className="mb-3 flex items-center justify-between gap-3">
