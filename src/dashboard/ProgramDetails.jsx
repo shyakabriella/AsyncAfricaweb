@@ -258,9 +258,11 @@ function buildErrorMessage(result) {
   if (!result) return "Request failed.";
 
   if (result?.errors && typeof result.errors === "object") {
-    const messages = Object.values(result.errors)
-      .flat()
-      .filter(Boolean);
+    const messages = Object.entries(result.errors)
+      .flatMap(([field, value]) => {
+        const list = Array.isArray(value) ? value : [value];
+        return list.filter(Boolean).map((msg) => `${field}: ${msg}`);
+      });
 
     if (messages.length) {
       return messages.join("\n");
@@ -275,12 +277,12 @@ function buildErrorMessage(result) {
 }
 
 function safeArray(value) {
-  if (Array.isArray(value)) return value;
+  if (Array.isArray(value)) return value.filter(Boolean);
 
   if (typeof value === "string") {
     try {
       const parsed = JSON.parse(value);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) return parsed.filter(Boolean);
     } catch {
       return value
         .split("\n")
@@ -394,6 +396,15 @@ function normalizeProgram(item) {
 }
 
 function buildPayload(program) {
+  const shifts = safeShiftArray(program.shifts).map((shift) => ({
+    id: shift.id || "",
+    name: (shift.name || "").trim(),
+    start_time: shift.startTime || "",
+    end_time: shift.endTime || "",
+    capacity: Number(shift.capacity || 0),
+    filled: Number(shift.filled || 0),
+  }));
+
   return {
     slug: program.slug || "",
     name: program.name || "",
@@ -418,14 +429,7 @@ function buildPayload(program) {
     skills: safeArray(program.skills),
     outcomes: safeArray(program.outcomes),
     tools: safeArray(program.tools),
-    shifts: safeShiftArray(program.shifts).map((shift) => ({
-      id: shift.id || "",
-      name: shift.name || "",
-      start_time: shift.startTime || "",
-      end_time: shift.endTime || "",
-      capacity: Number(shift.capacity || 0),
-      filled: Number(shift.filled || 0),
-    })),
+    shifts,
   };
 }
 
@@ -1571,9 +1575,11 @@ function ShiftSettingsModal({
   const [rows, setRows] = useState([
     { id: makeShiftId(), name: "", startTime: "", endTime: "", capacity: "", filled: 0 },
   ]);
+  const [formError, setFormError] = useState("");
 
   useEffect(() => {
     if (open) {
+      setFormError("");
       setRows(
         shifts.length
           ? shifts.map((item) => ({
@@ -1599,6 +1605,8 @@ function ShiftSettingsModal({
   }, [shifts, open]);
 
   function handleChange(index, field, value) {
+    setFormError("");
+
     setRows((prev) =>
       prev.map((item, i) =>
         i === index
@@ -1612,6 +1620,7 @@ function ShiftSettingsModal({
   }
 
   function addRow() {
+    setFormError("");
     setRows((prev) => [
       ...prev,
       {
@@ -1626,11 +1635,52 @@ function ShiftSettingsModal({
   }
 
   function removeRow(index) {
+    setFormError("");
     setRows((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function validateRows(cleaned) {
+    const errors = [];
+    const usedNames = new Set();
+
+    cleaned.forEach((item, index) => {
+      const rowNo = index + 1;
+      const name = item.name.trim().toLowerCase();
+
+      if (!item.name.trim()) {
+        errors.push(`Shift ${rowNo}: Shift name is required.`);
+      }
+
+      if (!item.startTime) {
+        errors.push(`Shift ${rowNo}: Start time is required.`);
+      }
+
+      if (!item.endTime) {
+        errors.push(`Shift ${rowNo}: End time is required.`);
+      }
+
+      if (!item.capacity || Number(item.capacity) < 1) {
+        errors.push(`Shift ${rowNo}: Capacity must be at least 1.`);
+      }
+
+      if (item.startTime && item.endTime && item.startTime >= item.endTime) {
+        errors.push(`Shift ${rowNo}: End time must be after start time.`);
+      }
+
+      if (name) {
+        if (usedNames.has(name)) {
+          errors.push(`Shift ${rowNo}: Shift name must be unique.`);
+        }
+        usedNames.add(name);
+      }
+    });
+
+    return errors;
   }
 
   function handleSubmit(e) {
     e.preventDefault();
+    setFormError("");
 
     const cleaned = rows
       .map((item) => ({
@@ -1646,6 +1696,13 @@ function ShiftSettingsModal({
           item.name || item.startTime || item.endTime || item.capacity > 0
       );
 
+    const errors = validateRows(cleaned);
+
+    if (errors.length) {
+      setFormError(errors.join("\n"));
+      return;
+    }
+
     onSave(cleaned);
   }
 
@@ -1656,6 +1713,12 @@ function ShiftSettingsModal({
           Create available shifts for this program. Each shift should have a
           name, start time, end time, and student volume/capacity.
         </div>
+
+        {formError ? (
+          <div className="whitespace-pre-line rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {formError}
+          </div>
+        ) : null}
 
         <div className="space-y-3">
           {rows.map((row, index) => (
