@@ -24,7 +24,7 @@ export default function Home() {
   const routeForRole = (roleSlug) => {
     const map = {
       admin: "/dashboard",
-      haguruka_staff: "/dashboard",
+      AsyncAfrica_staff: "/dashboard",
       police: "/dashboard",
       health_isange: "/dashboard",
       local_authority: "/dashboard",
@@ -93,13 +93,13 @@ export default function Home() {
             <div className="w-16 h-16 rounded-xl bg-white/95 grid place-items-center overflow-hidden">
               <img
                 src="/log.png"
-                alt="Haguruka Logo"
+                alt="AsyncAfrica Logo"
                 className="w-12 h-12 object-contain"
               />
             </div>
 
             <div>
-              <div className="font-extrabold tracking-wide">Haguruka App</div>
+              <div className="font-extrabold tracking-wide">AsyncAfrica App</div>
               <div className="text-xs text-white/80 mt-1">
                 Safe reporting & support
               </div>

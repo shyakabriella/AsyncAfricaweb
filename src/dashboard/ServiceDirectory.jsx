@@ -18,7 +18,7 @@ import { useEffect, useMemo, useState } from "react";
  */
 
 const ORG_TYPES = [
-  { value: "haguruka", label: "Haguruka" },
+  { value: "AsyncAfrica", label: "AsyncAfrica" },
   { value: "police", label: "Police" },
   { value: "health", label: "Health / Isange" },
   { value: "local_authority", label: "Local Authority" },
@@ -49,19 +49,19 @@ export default function ServiceDirectory() {
     const demo = [
       {
         id: 1,
-        name: "Haguruka Coordination Office",
-        type: "haguruka",
+        name: "AsyncAfrica Coordination Office",
+        type: "AsyncAfrica",
         district: "Kigali",
         phone: "+250 788 000 000",
-        email: "support@haguruka.rw",
+        email: "support@AsyncAfrica.rw",
         service_points: [
           {
             id: 11,
-            name: "Haguruka HQ",
+            name: "AsyncAfrica HQ",
             district: "Kigali",
             sector: "Nyarugenge",
             phone: "+250 788 000 001",
-            email: "hq@haguruka.rw",
+            email: "hq@AsyncAfrica.rw",
             gps: "-1.9441, 30.0619",
           },
         ],

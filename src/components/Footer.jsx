@@ -1,7 +1,7 @@
 export default function Footer() {
   return (
     <footer className="ft">
-      <span>© {new Date().getFullYear()} Haguruka App</span>
+      <span>© {new Date().getFullYear()} AsyncAfrica App</span>
       <span className="ft-right">Version 1.0.0</span>
 
       <style>{css}</style>

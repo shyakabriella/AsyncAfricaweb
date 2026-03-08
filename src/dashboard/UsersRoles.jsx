@@ -18,7 +18,7 @@ import { useEffect, useMemo, useState } from "react";
 
 const ROLE_OPTIONS = [
   { slug: "admin", name: "Admin" },
-  { slug: "haguruka_staff", name: "Haguruka Staff" },
+  { slug: "AsyncAfrica_staff", name: "AsyncAfrica Staff" },
   { slug: "police", name: "Police" },
   { slug: "health_isange", name: "Health / Isange" },
   { slug: "local_authority", name: "Local Authority" },
@@ -41,7 +41,7 @@ export default function UsersRoles() {
       {
         id: 1,
         name: "The Admin",
-        email: "admin@haguruka.rw",
+        email: "admin@AsyncAfrica.rw",
         role: "admin",
         is_active: true,
         created_at: "2025-05-01",
@@ -49,8 +49,8 @@ export default function UsersRoles() {
       {
         id: 2,
         name: "Case Manager 1",
-        email: "staff1@haguruka.rw",
-        role: "haguruka_staff",
+        email: "staff1@AsyncAfrica.rw",
+        role: "AsyncAfrica_staff",
         is_active: true,
         created_at: "2025-05-02",
       },
@@ -73,7 +73,7 @@ export default function UsersRoles() {
       {
         id: 5,
         name: "Data Analyst",
-        email: "analyst@haguruka.rw",
+        email: "analyst@AsyncAfrica.rw",
         role: "analyst",
         is_active: true,
         created_at: "2025-05-06",
@@ -303,7 +303,7 @@ function MiniStat({ label, value }) {
 function AddUserModal({ onClose, onAdd }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState("haguruka_staff");
+  const [role, setRole] = useState("AsyncAfrica_staff");
   const [isActive, setIsActive] = useState(true);
 
   const submit = (e) => {
@@ -349,7 +349,7 @@ function AddUserModal({ onClose, onAdd }) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm outline-none focus:border-teal-400 focus:ring-4 focus:ring-teal-100"
-              placeholder="e.g. user@haguruka.rw"
+              placeholder="e.g. user@AsyncAfrica.rw"
               type="email"
               required
             />

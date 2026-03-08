@@ -22,8 +22,8 @@ const ROLE_PRESETS = [
     description: "System administrator with full access.",
   },
   {
-    name: "Haguruka Staff",
-    slug: "haguruka_staff",
+    name: "AsyncAfrica Staff",
+    slug: "AsyncAfrica_staff",
     description: "Case managers and staff who handle incidents and escalations.",
   },
   {
@@ -49,7 +49,7 @@ const ROLE_PRESETS = [
 ];
 
 const DEFAULT_SETTINGS = {
-  appName: "Haguruka App",
+  appName: "AsyncAfrica App",
   defaultLanguage: "en",
   timezone: "Africa/Kigali",
   hotline: "3029",
@@ -213,7 +213,7 @@ function GeneralTab({ settings, setSettings }) {
             value={settings.appName}
             onChange={(e) => setSettings((p) => ({ ...p, appName: e.target.value }))}
             className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm outline-none focus:border-teal-400 focus:ring-4 focus:ring-teal-100"
-            placeholder="Haguruka App"
+            placeholder="AsyncAfrica App"
           />
         </Field>
 
