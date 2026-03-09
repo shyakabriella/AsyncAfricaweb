@@ -312,8 +312,7 @@ export default function Training() {
 
             <p className="mt-5 max-w-2xl text-sm leading-7 text-gray-300 sm:text-base">
               Start your journey with AsyncAfrica through practical internship
-              and training opportunities in technology. Discover the right path,
-              build useful skills, and grow with real-world experience.
+              and training opportunities in technology.
             </p>
 
             <div className="mt-6 flex flex-wrap gap-2.5">
