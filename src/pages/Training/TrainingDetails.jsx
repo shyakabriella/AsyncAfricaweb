@@ -73,11 +73,7 @@ function safeShiftArray(value) {
             ),
     }))
     .filter(
-      (item) =>
-        item.name ||
-        item.startTime ||
-        item.endTime ||
-        item.capacity > 0
+      (item) => item.name || item.startTime || item.endTime || item.capacity > 0
     );
 }
 
@@ -103,6 +99,7 @@ function normalizeProgram(item) {
     category: item?.category || "",
     iconKey: item?.icon_key || "",
     image: item?.image || "",
+    price: Number(item?.price || 0),
     skills: safeArray(item?.skills),
     outcomes: safeArray(item?.outcomes),
     tools: safeArray(item?.tools),
@@ -189,6 +186,20 @@ function formatTime(value) {
   )}`;
 }
 
+function formatPriceRWF(value) {
+  const amount = Number(value || 0);
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return "Contact for price";
+  }
+
+  return new Intl.NumberFormat("en-RW", {
+    style: "currency",
+    currency: "RWF",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
 function totalShiftCapacity(shifts) {
   return (shifts || []).reduce(
     (sum, shift) => sum + Number(shift?.capacity || 0),
@@ -201,6 +212,30 @@ function hasOpenShift(shifts) {
   return shifts.some((shift) => !shift.isFull);
 }
 
+async function copyTextToClipboard(text) {
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {}
+
+  try {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.setAttribute("readonly", "");
+    textArea.style.position = "absolute";
+    textArea.style.left = "-9999px";
+    document.body.appendChild(textArea);
+    textArea.select();
+    document.execCommand("copy");
+    document.body.removeChild(textArea);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export default function TrainingDetails() {
   const { slug } = useParams();
 
@@ -209,6 +244,7 @@ export default function TrainingDetails() {
   const [error, setError] = useState("");
   const [notFound, setNotFound] = useState(false);
   const [showApplicationModal, setShowApplicationModal] = useState(false);
+  const [shareNotice, setShareNotice] = useState("");
 
   useEffect(() => {
     let ignore = false;
@@ -284,6 +320,105 @@ export default function TrainingDetails() {
   const canApply = useMemo(() => {
     return hasOpenShift(program?.shifts || []);
   }, [program]);
+
+  const shareUrl = useMemo(() => {
+    const path = `/training/${program?.slug || slug || ""}`;
+
+    if (typeof window === "undefined") return path;
+
+    return `${window.location.origin}${path}`;
+  }, [program?.slug, slug]);
+
+  const shareText = useMemo(() => {
+    if (!program) return "";
+
+    return [
+      program.title,
+      program.intro,
+      `Price: ${formatPriceRWF(program.price)}`,
+      shareUrl,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }, [program, shareUrl]);
+
+  async function handleShare(platform) {
+    if (!program) return;
+
+    setShareNotice("");
+
+    try {
+      if (platform === "native") {
+        if (navigator.share) {
+          await navigator.share({
+            title: program.title,
+            text: `${program.title}\nPrice: ${formatPriceRWF(
+              program.price
+            )}\n${program.intro}`,
+            url: shareUrl,
+          });
+          return;
+        }
+
+        const copied = await copyTextToClipboard(shareText);
+        setShareNotice(
+          copied
+            ? "Program link copied successfully."
+            : "Unable to copy program link."
+        );
+        return;
+      }
+
+      if (platform === "copy") {
+        const copied = await copyTextToClipboard(shareText);
+        setShareNotice(
+          copied
+            ? "Program link copied successfully."
+            : "Unable to copy program link."
+        );
+        return;
+      }
+
+      if (platform === "whatsapp") {
+        const url = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+        window.open(url, "_blank", "noopener,noreferrer");
+        return;
+      }
+
+      if (platform === "facebook") {
+        const url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
+          shareUrl
+        )}&quote=${encodeURIComponent(
+          `${program.title} - ${formatPriceRWF(program.price)}`
+        )}`;
+        window.open(url, "_blank", "noopener,noreferrer");
+        return;
+      }
+
+      if (platform === "instagram") {
+        const copied = await copyTextToClipboard(shareText);
+        window.open("https://www.instagram.com/", "_blank", "noopener,noreferrer");
+        setShareNotice(
+          copied
+            ? "Program link copied. Paste it on Instagram."
+            : "Instagram opened. Copy the program link manually if needed."
+        );
+        return;
+      }
+
+      if (platform === "tiktok") {
+        const copied = await copyTextToClipboard(shareText);
+        window.open("https://www.tiktok.com/", "_blank", "noopener,noreferrer");
+        setShareNotice(
+          copied
+            ? "Program link copied. Paste it on TikTok."
+            : "TikTok opened. Copy the program link manually if needed."
+        );
+      }
+    } catch {
+      setShareNotice("Unable to open share option right now.");
+    }
+  }
 
   if (!slug) {
     return <Navigate to="/training" replace />;
@@ -531,6 +666,14 @@ export default function TrainingDetails() {
                       {canApply ? "Apply Now" : "Application Closed"}
                     </button>
 
+                    <button
+                      type="button"
+                      onClick={() => handleShare("native")}
+                      className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 px-6 py-3 text-sm font-bold text-white transition duration-300 hover:-translate-y-1 hover:border-[#7A6CF5] hover:bg-[#6050F0]/10"
+                    >
+                      Share Program
+                    </button>
+
                     <Link
                       to="/training"
                       className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white/5 px-6 py-3 text-sm font-bold text-white transition duration-300 hover:-translate-y-1 hover:border-[#7A6CF5] hover:bg-[#6050F0]/10"
@@ -546,12 +689,13 @@ export default function TrainingDetails() {
                   ) : null}
 
                   <div
-                    className="animate-fade-up mt-7 grid grid-cols-2 gap-3 lg:grid-cols-4"
+                    className="animate-fade-up mt-7 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5"
                     style={{ animationDelay: "0.44s" }}
                   >
                     <InfoCard label="Duration" value={program.duration} />
                     <InfoCard label="Level" value={program.level} />
                     <InfoCard label="Format" value={program.format} />
+                    <InfoCard label="Price" value={formatPriceRWF(program.price)} />
                     <InfoCard
                       label="Shifts"
                       value={String(program.shifts.length || 0)}
@@ -578,16 +722,11 @@ export default function TrainingDetails() {
 
                       <div className="space-y-4">
                         <div className="rounded-2xl bg-black/30 p-4">
-                          <div className="mb-3 flex items-center justify-between">
-                            <span className="text-sm text-gray-300">
-                              Program Strength
-                            </span>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-sm text-gray-300">Price</span>
                             <span className="text-sm font-bold text-[#7A6CF5]">
-                              90%
+                              {formatPriceRWF(program.price)}
                             </span>
-                          </div>
-                          <div className="h-2 overflow-hidden rounded-full bg-white/10">
-                            <div className="h-full w-[90%] rounded-full bg-gradient-to-r from-[#6050F0] to-[#7A6CF5]" />
                           </div>
                         </div>
 
@@ -852,6 +991,55 @@ export default function TrainingDetails() {
                     </div>
                   ) : null}
 
+                  <div className="mt-8 rounded-[24px] border border-white/10 bg-black/20 p-5 sm:p-6">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h3 className="text-lg font-bold text-white sm:text-xl">
+                        Share this program
+                      </h3>
+                      <span className="rounded-full bg-[#6050F0]/20 px-3 py-1 text-[11px] font-semibold text-[#c9c3ff] sm:text-xs">
+                        {formatPriceRWF(program.price)}
+                      </span>
+                    </div>
+
+                    <p className="mt-3 text-sm leading-7 text-gray-300">
+                      Share this training program with others on social media.
+                    </p>
+
+                    <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
+                      <ShareButton
+                        label="WhatsApp"
+                        onClick={() => handleShare("whatsapp")}
+                      />
+                      <ShareButton
+                        label="Facebook"
+                        onClick={() => handleShare("facebook")}
+                      />
+                      <ShareButton
+                        label="Instagram"
+                        onClick={() => handleShare("instagram")}
+                      />
+                      <ShareButton
+                        label="TikTok"
+                        onClick={() => handleShare("tiktok")}
+                      />
+                      <ShareButton
+                        label="Copy Link"
+                        onClick={() => handleShare("copy")}
+                      />
+                    </div>
+
+                    {shareNotice ? (
+                      <p className="mt-4 text-sm text-[#c9c3ff]">
+                        {shareNotice}
+                      </p>
+                    ) : null}
+
+                    <p className="mt-2 text-xs text-gray-400">
+                      Instagram and TikTok will open after copying the program
+                      link so you can paste it there.
+                    </p>
+                  </div>
+
                   <div className="mt-8 rounded-[24px] border border-[#7A6CF5]/20 bg-[#6050F0]/10 p-5 sm:p-6">
                     <h3 className="text-lg font-bold text-white sm:text-xl">
                       Ready to begin?
@@ -860,6 +1048,14 @@ export default function TrainingDetails() {
                       Take the next step and start your application for this
                       program.
                     </p>
+                    <div className="mt-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-gray-400">
+                        Program Price
+                      </p>
+                      <p className="mt-1 text-lg font-bold text-white">
+                        {formatPriceRWF(program.price)}
+                      </p>
+                    </div>
                     <div className="mt-5 flex flex-col gap-3 sm:flex-row">
                       <button
                         type="button"
@@ -909,5 +1105,17 @@ function InfoCard({ label, value }) {
         {value}
       </div>
     </div>
+  );
+}
+
+function ShareButton({ label, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition duration-300 hover:border-[#7A6CF5]/40 hover:bg-[#6050F0]/10"
+    >
+      {label}
+    </button>
   );
 }

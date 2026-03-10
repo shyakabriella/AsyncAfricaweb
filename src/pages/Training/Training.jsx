@@ -21,6 +21,19 @@ function makeSlug(value) {
     .replace(/-+/g, "-");
 }
 
+function formatPriceLabel(value) {
+  const amount = Number(value || 0);
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return "Contact us";
+  }
+
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
 function normalizeProgram(item) {
   const title = item?.name || item?.title || "Training Program";
   const description =
@@ -41,6 +54,9 @@ function normalizeProgram(item) {
     category: item?.category || "General",
     iconKey: item?.icon_key || "",
     status: item?.status || "Draft",
+    image: item?.image || "",
+    price: Number(item?.price || 0),
+    duration: item?.duration || "",
   };
 }
 
@@ -124,90 +140,135 @@ function getStatusClasses(status) {
 
 function ProgramCard({ item, expanded, onToggle }) {
   return (
-    <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.05] p-4 shadow-[0_10px_30px_rgba(0,0,0,0.18)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:border-[#7A6CF5]/40 hover:bg-white/[0.08]">
+    <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.05] shadow-[0_10px_30px_rgba(0,0,0,0.18)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:border-[#7A6CF5]/40 hover:bg-white/[0.08]">
       <div className="absolute inset-0 bg-gradient-to-br from-[#6050F0]/10 via-transparent to-[#7A6CF5]/10 opacity-0 transition duration-500 group-hover:opacity-100" />
 
       <div className="relative z-10 flex h-full flex-col">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-[#6050F0]/15 p-3 text-[#c9c3ff]">
-              {getProgramIcon(item.iconKey, item.slug, item.category)}
+        <div className="relative h-52 overflow-hidden">
+          {item.image ? (
+            <img
+              src={item.image}
+              alt={item.title}
+              className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#1a1d2d] via-[#11131d] to-[#0b0d14] text-[#c9c3ff]">
+              <div className="flex flex-col items-center gap-3">
+                <div className="rounded-2xl bg-[#6050F0]/15 p-4">
+                  {getProgramIcon(item.iconKey, item.slug, item.category)}
+                </div>
+                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
+                  No Image
+                </span>
+              </div>
             </div>
+          )}
 
-            <div className="min-w-0">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-gray-400">
-                {item.category}
-              </p>
-              <h3 className="mt-1 line-clamp-1 text-base font-bold text-white sm:text-lg">
-                {item.title}
-              </h3>
-            </div>
-          </div>
+          <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
 
-          <span
-            className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold ${getStatusClasses(
-              item.status
-            )}`}
-          >
-            {item.status}
-          </span>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
-          <span className="rounded-full border border-[#7A6CF5]/20 bg-[#6050F0]/10 px-2.5 py-1 text-[11px] font-semibold text-[#d9d5ff]">
-            {item.tag}
-          </span>
-          <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-gray-300">
-            Career Ready
-          </span>
-        </div>
-
-        <p className="mt-4 text-sm leading-6 text-gray-300">
-          {expanded ? item.description : item.shortDescription}
-        </p>
-
-        {expanded ? (
-          <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-            <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-gray-200">
-              <span className="block text-[10px] uppercase tracking-[0.16em] text-gray-400">
-                Category
-              </span>
-              <span className="mt-1 block font-medium">{item.category}</span>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-gray-200">
-              <span className="block text-[10px] uppercase tracking-[0.16em] text-gray-400">
-                Status
-              </span>
-              <span className="mt-1 block font-medium">{item.status}</span>
-            </div>
-          </div>
-        ) : null}
-
-        <div className="mt-4 flex items-center justify-between gap-3 pt-2">
-          <button
-            type="button"
-            onClick={onToggle}
-            className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-gray-200 transition hover:border-[#7A6CF5]/40 hover:bg-[#6050F0]/10"
-          >
-            {expanded ? "Show less" : "Show more"}
-            <svg
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              className={`h-4 w-4 transition ${expanded ? "rotate-180" : ""}`}
+          <div className="absolute left-4 right-4 top-4 flex items-start justify-between gap-3">
+            <span
+              className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold backdrop-blur ${getStatusClasses(
+                item.status
+              )}`}
             >
-              <path d="M12 15.5 5 8.5l1.4-1.4 5.6 5.6 5.6-5.6L19 8.5l-7 7Z" />
-            </svg>
-          </button>
+              {item.status}
+            </span>
 
-          <Link
-            to={`/training/${item.slug}`}
-            className="inline-flex items-center gap-2 rounded-full bg-[#6050F0] px-3.5 py-2 text-xs font-bold text-white transition hover:bg-[#7A6CF5]"
-          >
-            View
-            <svg viewBox="0 0 24 24" fill="currentColor" className="h-3.5 w-3.5">
-              <path d="M13.2 4.8 20.4 12l-7.2 7.2-1.4-1.4 4.8-4.8H3.6v-2h13l-4.8-4.8 1.4-1.4Z" />
-            </svg>
-          </Link>
+            <span className="shrink-0 rounded-full border border-[#7A6CF5]/30 bg-[#6050F0]/80 px-3 py-1 text-[11px] font-bold text-white shadow-lg backdrop-blur">
+              {formatPriceLabel(item.price)}
+            </span>
+          </div>
+
+          <div className="absolute bottom-4 left-4 right-4">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-gray-300">
+              {item.category}
+            </p>
+            <h3 className="mt-1 line-clamp-2 text-lg font-bold text-white sm:text-xl">
+              {item.title}
+            </h3>
+          </div>
+        </div>
+
+        <div className="p-4">
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-full border border-[#7A6CF5]/20 bg-[#6050F0]/10 px-2.5 py-1 text-[11px] font-semibold text-[#d9d5ff]">
+              {item.tag}
+            </span>
+
+            {item.duration ? (
+              <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-gray-300">
+                {item.duration}
+              </span>
+            ) : null}
+          </div>
+
+          <p className="mt-4 text-sm leading-6 text-gray-300">
+            {expanded ? item.description : item.shortDescription}
+          </p>
+
+          {expanded ? (
+            <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-gray-200">
+                <span className="block text-[10px] uppercase tracking-[0.16em] text-gray-400">
+                  Category
+                </span>
+                <span className="mt-1 block font-medium">{item.category}</span>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-gray-200">
+                <span className="block text-[10px] uppercase tracking-[0.16em] text-gray-400">
+                  Price
+                </span>
+                <span className="mt-1 block font-medium">
+                  {formatPriceLabel(item.price)}
+                </span>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-gray-200">
+                <span className="block text-[10px] uppercase tracking-[0.16em] text-gray-400">
+                  Duration
+                </span>
+                <span className="mt-1 block font-medium">
+                  {item.duration || "Not set"}
+                </span>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-gray-200">
+                <span className="block text-[10px] uppercase tracking-[0.16em] text-gray-400">
+                  Status
+                </span>
+                <span className="mt-1 block font-medium">{item.status}</span>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mt-4 flex items-center justify-between gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onToggle}
+              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-gray-200 transition hover:border-[#7A6CF5]/40 hover:bg-[#6050F0]/10"
+            >
+              {expanded ? "Show less" : "Show more"}
+              <svg
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className={`h-4 w-4 transition ${expanded ? "rotate-180" : ""}`}
+              >
+                <path d="M12 15.5 5 8.5l1.4-1.4 5.6 5.6 5.6-5.6L19 8.5l-7 7Z" />
+              </svg>
+            </button>
+
+            <Link
+              to={`/training/${item.slug}`}
+              className="inline-flex items-center gap-2 rounded-full bg-[#6050F0] px-3.5 py-2 text-xs font-bold text-white transition hover:bg-[#7A6CF5]"
+            >
+              View
+              <svg viewBox="0 0 24 24" fill="currentColor" className="h-3.5 w-3.5">
+                <path d="M13.2 4.8 20.4 12l-7.2 7.2-1.4-1.4 4.8-4.8H3.6v-2h13l-4.8-4.8 1.4-1.4Z" />
+              </svg>
+            </Link>
+          </div>
         </div>
       </div>
     </div>
@@ -390,7 +451,7 @@ export default function Training() {
               Available Programs
             </h2>
             <p className="mt-1 text-sm text-gray-400">
-              Compact view with quick details. Click <span className="font-semibold text-gray-200">Show more</span> to see extra information.
+              Browse training programs with image, price, and quick details.
             </p>
           </div>
         </div>
@@ -400,16 +461,15 @@ export default function Training() {
             {Array.from({ length: 6 }).map((_, index) => (
               <div
                 key={index}
-                className="rounded-2xl border border-white/10 bg-white/[0.05] p-4 backdrop-blur-xl"
+                className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.05] backdrop-blur-xl"
               >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="h-11 w-11 rounded-xl bg-white/10" />
-                  <div className="h-6 w-16 rounded-full bg-white/10" />
+                <div className="h-52 bg-white/10" />
+                <div className="p-4">
+                  <div className="h-5 w-2/3 rounded bg-white/10" />
+                  <div className="mt-3 h-4 w-full rounded bg-white/10" />
+                  <div className="mt-2 h-4 w-4/5 rounded bg-white/10" />
+                  <div className="mt-4 h-8 w-28 rounded-full bg-white/10" />
                 </div>
-                <div className="mt-4 h-5 w-2/3 rounded bg-white/10" />
-                <div className="mt-3 h-4 w-full rounded bg-white/10" />
-                <div className="mt-2 h-4 w-4/5 rounded bg-white/10" />
-                <div className="mt-4 h-8 w-28 rounded-full bg-white/10" />
               </div>
             ))}
           </div>

@@ -5,6 +5,7 @@ const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api";
 const APPLICATIONS_ENDPOINT =
   import.meta.env.VITE_APPLICATIONS_ENDPOINT || "/applications";
+const DEFAULT_MOMO_CODE = import.meta.env.VITE_MOMO_CODE || "";
 
 function parsePossibleJsonArray(value) {
   if (Array.isArray(value)) return value;
@@ -89,6 +90,7 @@ function normalizeProgram(program) {
       format: "",
       intro: "",
       description: "",
+      price: 0,
       skills: [],
       tools: [],
       experienceLevels: [],
@@ -107,6 +109,7 @@ function normalizeProgram(program) {
     format: program?.format || "",
     intro: program?.intro || "",
     description: program?.description || "",
+    price: Number(program?.price || 0),
     skills: normalizeOptionArray(program?.skills),
     tools: normalizeOptionArray(program?.tools),
     experienceLevels: normalizeOptionArray(
@@ -153,6 +156,20 @@ function formatTime(value) {
     2,
     "0"
   )}`;
+}
+
+function formatPriceRWF(value) {
+  const amount = Number(value || 0);
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return "To be confirmed";
+  }
+
+  return new Intl.NumberFormat("en-RW", {
+    style: "currency",
+    currency: "RWF",
+    maximumFractionDigits: 0,
+  }).format(amount);
 }
 
 function splitFullName(fullName = "") {
@@ -525,14 +542,55 @@ function ChoiceCard({ item, selected, onToggle }) {
   );
 }
 
+function MomoIcon() {
+  const [failed, setFailed] = useState(false);
+
+  if (!failed) {
+    return (
+      <img
+        src="/momo.png"
+        alt="MoMo"
+        onError={() => setFailed(true)}
+        className="h-10 w-10 rounded-xl object-contain bg-white p-1"
+      />
+    );
+  }
+
+  return (
+    <div className="grid h-10 w-10 place-items-center rounded-xl bg-yellow-400/20 text-yellow-200">
+      <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
+        <path
+          d="M4 8.5A2.5 2.5 0 0 1 6.5 6h11A2.5 2.5 0 0 1 20 8.5v7A2.5 2.5 0 0 1 17.5 18h-11A2.5 2.5 0 0 1 4 15.5v-7Z"
+          stroke="currentColor"
+          strokeWidth="1.8"
+        />
+        <path
+          d="M16 12h.01"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+        />
+        <path
+          d="M4.8 9.5h14.4"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+        />
+      </svg>
+    </div>
+  );
+}
+
 export default function Application({
   open,
   onClose,
   program,
   onSubmit,
   onGoogleApply,
+  momoCode,
 }) {
   const normalizedProgram = useMemo(() => normalizeProgram(program), [program]);
+  const resolvedMomoCode = momoCode || DEFAULT_MOMO_CODE;
 
   const [step, setStep] = useState(1);
   const [form, setForm] = useState(buildInitialForm(normalizedProgram));
@@ -823,8 +881,8 @@ export default function Application({
                   Application received
                 </h3>
                 <p className="mt-1 text-sm text-emerald-100/90">
-                  Your application for <strong>{normalizedProgram.title}</strong>{" "}
-                  has been captured successfully.
+                  Your application has been successfully received, it will be
+                  validated and approved after payment within 2 days.
                 </p>
               </div>
             </div>
@@ -835,7 +893,11 @@ export default function Application({
                 value={`${submittedPayload.applicant.first_name} ${submittedPayload.applicant.last_name}`}
               />
               <ReviewRow label="Email" value={submittedPayload.applicant.email} />
-              <ReviewRow label="Program ID" value={submittedPayload.program_id} />
+              <ReviewRow label="Program" value={normalizedProgram.title} />
+              <ReviewRow
+                label="Price"
+                value={formatPriceRWF(normalizedProgram.price)}
+              />
               <ReviewRow
                 label="Shift"
                 value={
@@ -846,6 +908,43 @@ export default function Application({
                     : "Will be assigned later"
                 }
               />
+            </div>
+
+            <div className="mt-6 rounded-[24px] border border-yellow-400/20 bg-yellow-400/10 p-5">
+              <div className="flex items-center gap-3">
+                <MomoIcon />
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-yellow-100/80">
+                    Payment Information
+                  </p>
+                  <h4 className="mt-1 text-lg font-bold text-white">
+                    Pay with MoMo
+                  </h4>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-2">
+                <ReviewRow
+                  label="Program Price"
+                  value={formatPriceRWF(normalizedProgram.price)}
+                />
+                <ReviewRow
+                  label="MoMo Code"
+                  value={resolvedMomoCode || "Payment code will be shared soon"}
+                />
+              </div>
+
+              <p className="mt-4 text-sm leading-7 text-gray-200">
+                Please complete payment using the MoMo code above. After payment,
+                your application will be validated and approved within 2 days.
+              </p>
+
+              {!resolvedMomoCode ? (
+                <p className="mt-3 text-xs text-yellow-100/80">
+                  Add <strong>VITE_MOMO_CODE</strong> in your .env file or pass a{" "}
+                  <strong>momoCode</strong> prop to show the payment code here.
+                </p>
+              ) : null}
             </div>
 
             <div className="mt-6 flex flex-wrap gap-3">
@@ -903,6 +1002,11 @@ export default function Application({
                       {normalizedProgram.format}
                     </span>
                   ) : null}
+                  {normalizedProgram.price > 0 ? (
+                    <span className="rounded-full bg-yellow-400/20 px-3 py-1 text-xs font-semibold text-yellow-100">
+                      {formatPriceRWF(normalizedProgram.price)}
+                    </span>
+                  ) : null}
                 </div>
 
                 <p className="mt-5 text-sm leading-7 text-gray-300">
@@ -945,6 +1049,10 @@ export default function Application({
                   />
                   <ReviewRow label="Level" value={normalizedProgram.level} />
                   <ReviewRow label="Format" value={normalizedProgram.format} />
+                  <ReviewRow
+                    label="Price"
+                    value={formatPriceRWF(normalizedProgram.price)}
+                  />
                 </div>
               </div>
             </div>
@@ -1358,6 +1466,10 @@ export default function Application({
                           value={normalizedProgram.level}
                         />
                         <ReviewRow
+                          label="Program Price"
+                          value={formatPriceRWF(normalizedProgram.price)}
+                        />
+                        <ReviewRow
                           label="Selected Skills"
                           value={form.selectedSkills.join(", ")}
                         />
@@ -1374,6 +1486,32 @@ export default function Application({
                                 )} - ${formatTime(selectedShift.endTime)})`
                               : "No shift selected"
                           }
+                        />
+                      </div>
+                    </div>
+
+                    <div className="rounded-[24px] border border-yellow-400/20 bg-yellow-400/10 p-5">
+                      <div className="flex items-center gap-3">
+                        <MomoIcon />
+                        <div>
+                          <h4 className="text-lg font-bold text-white">
+                            Payment reminder
+                          </h4>
+                          <p className="mt-1 text-sm text-yellow-100/90">
+                            After submission, your application will be validated
+                            and approved after payment within 2 days.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid gap-3 md:grid-cols-2">
+                        <ReviewRow
+                          label="Program Price"
+                          value={formatPriceRWF(normalizedProgram.price)}
+                        />
+                        <ReviewRow
+                          label="MoMo Code"
+                          value={resolvedMomoCode || "Payment code will be shared soon"}
                         />
                       </div>
                     </div>
@@ -1465,5 +1603,18 @@ export default function Application({
         </form>
       )}
     </ModalShell>
+  );
+}
+
+function InfoCard({ label, value }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 backdrop-blur-md transition duration-300 hover:border-[#7A6CF5]/30 hover:bg-white/[0.08]">
+      <div className="text-[11px] uppercase tracking-[0.16em] text-gray-400">
+        {label}
+      </div>
+      <div className="mt-2 text-sm font-bold text-white sm:text-base">
+        {value}
+      </div>
+    </div>
   );
 }

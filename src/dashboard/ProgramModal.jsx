@@ -34,12 +34,35 @@ export default function ProgramModal({
 
   if (!open) return null;
 
+  const sanitizePrice = (value) => {
+    const cleaned = String(value || "")
+      .replace(/[^\d.]/g, "")
+      .replace(/(\..*?)\..*/g, "$1");
+
+    const [whole, decimal] = cleaned.split(".");
+    if (decimal !== undefined) {
+      return `${whole}.${decimal.slice(0, 2)}`;
+    }
+
+    return whole;
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
 
+    let nextValue = value;
+
+    if (name === "students") {
+      nextValue = value.replace(/\D/g, "");
+    }
+
+    if (name === "price") {
+      nextValue = sanitizePrice(value);
+    }
+
     setFormData((prev) => ({
       ...prev,
-      [name]: name === "students" ? value.replace(/\D/g, "") : value,
+      [name]: nextValue,
     }));
 
     if (error) setError("");
@@ -96,9 +119,17 @@ export default function ProgramModal({
       !formData.duration ||
       !formData.instructor ||
       !formData.startDate ||
-      !formData.endDate
+      !formData.endDate ||
+      formData.price === undefined ||
+      formData.price === null ||
+      formData.price === ""
     ) {
       setError("Please fill in all required fields.");
+      return;
+    }
+
+    if (Number(formData.price) < 0) {
+      setError("Price cannot be negative.");
       return;
     }
 
@@ -116,6 +147,7 @@ export default function ProgramModal({
       status: formData.status || "Active",
       instructor: formData.instructor,
       students: Number(formData.students || 0),
+      price: Number(formData.price || 0),
       start_date: formData.startDate,
       end_date: formData.endDate,
       image: formData.image || "",
@@ -350,9 +382,23 @@ export default function ProgramModal({
                     <Field
                       label="Students"
                       name="students"
+                      type="number"
+                      min="0"
                       value={formData.students || ""}
                       onChange={handleChange}
                       placeholder="35"
+                      disabled={loading}
+                    />
+
+                    <Field
+                      label="Price"
+                      name="price"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formData.price || ""}
+                      onChange={handleChange}
+                      placeholder="50000"
                       disabled={loading}
                     />
 

@@ -14,234 +14,6 @@ const DETAIL_TABS = [
   { key: "shiftSettings", label: "Shift Settings" },
 ];
 
-const samplePrograms = [
-  {
-    id: 1,
-    code: "PRG-001",
-    slug: "software-development",
-    name: "Software Development",
-    badge: "Web & Mobile",
-    category: "Technology",
-    duration: "12 Weeks",
-    level: "Beginner to Intermediate",
-    format: "Practical Training",
-    status: "Active",
-    instructor: "Jean Claude",
-    students: 48,
-    startDate: "2026-03-01",
-    endDate: "2026-05-30",
-    description:
-      "This program helps learners build practical skills in frontend, backend, database design, APIs, deployment, and real-world software project development.",
-    objectives: [
-      "Understand software development fundamentals",
-      "Build real frontend and backend projects",
-      "Work with databases and APIs",
-      "Learn team collaboration and deployment",
-    ],
-    modules: ["HTML & CSS", "JavaScript", "React", "Backend APIs", "Database"],
-    skills: [
-      "Frontend development",
-      "Backend development",
-      "API integration",
-      "Version control",
-    ],
-    outcomes: [
-      "Build complete web applications",
-      "Understand real project workflow",
-      "Prepare for internship roles",
-    ],
-    tools: ["React", "Node.js", "MySQL", "Git", "Tailwind CSS"],
-    shifts: [
-      {
-        id: "shift-1",
-        name: "Morning Shift",
-        startTime: "08:00",
-        endTime: "11:00",
-        capacity: 25,
-        filled: 0,
-      },
-      {
-        id: "shift-2",
-        name: "Afternoon Shift",
-        startTime: "14:00",
-        endTime: "17:00",
-        capacity: 23,
-        filled: 0,
-      },
-    ],
-    image: "",
-    intro: "",
-    overview: "",
-    icon_key: "",
-    is_active: true,
-  },
-  {
-    id: 2,
-    code: "PRG-002",
-    slug: "artificial-intelligence",
-    name: "Artificial Intelligence",
-    badge: "Smart Systems",
-    category: "Technology",
-    duration: "10 Weeks",
-    level: "Intermediate",
-    format: "Theory + Practice",
-    status: "Active",
-    instructor: "Aline Uwase",
-    students: 35,
-    startDate: "2026-03-04",
-    endDate: "2026-05-20",
-    description:
-      "This program introduces students to AI concepts, intelligent systems, machine learning basics, and practical use of AI tools in real projects.",
-    objectives: [
-      "Learn the foundations of AI",
-      "Understand machine learning basics",
-      "Work with smart tools and datasets",
-      "Apply AI thinking to digital solutions",
-    ],
-    modules: [
-      "AI Fundamentals",
-      "Machine Learning",
-      "Data Basics",
-      "Prompting",
-      "AI Tools",
-    ],
-    skills: [
-      "AI fundamentals",
-      "Prompt engineering",
-      "Data handling",
-      "Automation concepts",
-    ],
-    outcomes: [
-      "Understand key AI concepts",
-      "Apply AI tools to real tasks",
-      "Improve innovation thinking",
-    ],
-    tools: ["Python", "Datasets", "AI Platforms", "Automation Tools"],
-    shifts: [
-      {
-        id: "shift-3",
-        name: "Weekend Shift",
-        startTime: "09:00",
-        endTime: "12:00",
-        capacity: 35,
-        filled: 0,
-      },
-    ],
-    image: "",
-    intro: "",
-    overview: "",
-    icon_key: "",
-    is_active: true,
-  },
-  {
-    id: 3,
-    code: "PRG-003",
-    slug: "networking-essentials",
-    name: "Networking Essentials",
-    badge: "Infrastructure",
-    category: "Infrastructure",
-    duration: "8 Weeks",
-    level: "Beginner to Intermediate",
-    format: "Hands-on Lab Training",
-    status: "Draft",
-    instructor: "Eric Mugisha",
-    students: 0,
-    startDate: "2026-03-10",
-    endDate: "2026-05-10",
-    description:
-      "This program provides practical skills in network setup, troubleshooting, routing, switching, and infrastructure support.",
-    objectives: [
-      "Understand network foundations",
-      "Configure basic network devices",
-      "Troubleshoot connectivity issues",
-      "Support small and medium infrastructures",
-    ],
-    modules: [
-      "Network Basics",
-      "Routing",
-      "Switching",
-      "Troubleshooting",
-      "Security Basics",
-    ],
-    skills: [
-      "IP addressing",
-      "Router configuration",
-      "Switching",
-      "Troubleshooting",
-    ],
-    outcomes: [
-      "Set up small and medium networks",
-      "Diagnose common connectivity issues",
-      "Prepare for network support roles",
-    ],
-    tools: ["Routers", "Switches", "LAN", "WAN", "Testing Tools"],
-    shifts: [],
-    image: "",
-    intro: "",
-    overview: "",
-    icon_key: "",
-    is_active: true,
-  },
-  {
-    id: 4,
-    code: "PRG-004",
-    slug: "cybersecurity-basics",
-    name: "Cybersecurity Basics",
-    badge: "Digital Safety",
-    category: "Security",
-    duration: "9 Weeks",
-    level: "Beginner to Intermediate",
-    format: "Practical + Guided Learning",
-    status: "Archived",
-    instructor: "Grace Ineza",
-    students: 21,
-    startDate: "2026-02-15",
-    endDate: "2026-04-20",
-    description:
-      "This program introduces cybersecurity awareness, digital protection practices, risk management, and safe systems usage.",
-    objectives: [
-      "Learn core security concepts",
-      "Understand common threats",
-      "Apply safe digital practices",
-      "Build awareness of security risks",
-    ],
-    modules: [
-      "Security Fundamentals",
-      "Threat Awareness",
-      "Access Control",
-      "Safe Practices",
-      "Risk Basics",
-    ],
-    skills: [
-      "Security awareness",
-      "Safe access control",
-      "Threat identification",
-      "Risk basics",
-    ],
-    outcomes: [
-      "Understand key security concepts",
-      "Recognize common digital risks",
-      "Improve system safety awareness",
-    ],
-    tools: ["Security Tools", "Protected Systems", "Risk Assessment"],
-    shifts: [
-      {
-        id: "shift-4",
-        name: "Evening Shift",
-        startTime: "17:30",
-        endTime: "20:00",
-        capacity: 21,
-        filled: 0,
-      },
-    ],
-    image: "",
-    intro: "",
-    overview: "",
-    icon_key: "",
-    is_active: true,
-  },
-];
-
 function makeShiftId() {
   return `shift-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
@@ -358,6 +130,31 @@ function formatTimeLabel(value) {
   return `${hours}:${minutes}`;
 }
 
+function formatPriceLabel(value) {
+  const amount = Number(value || 0);
+
+  if (!Number.isFinite(amount)) return "0";
+
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+function sanitizePrice(value) {
+  const cleaned = String(value || "")
+    .replace(/[^\d.]/g, "")
+    .replace(/(\..*?)\..*/g, "$1");
+
+  const [whole, decimal] = cleaned.split(".");
+
+  if (decimal !== undefined) {
+    return `${whole}.${decimal.slice(0, 2)}`;
+  }
+
+  return whole;
+}
+
 function getTotalShiftCapacity(shifts = []) {
   return shifts.reduce((sum, item) => sum + Number(item?.capacity || 0), 0);
 }
@@ -378,6 +175,7 @@ function normalizeProgram(item) {
     status: item.status || "Draft",
     instructor: item.instructor || "",
     students: Number(item.students || 0),
+    price: Number(item.price || 0),
     startDate: toDateInput(item.start_date || item.startDate),
     endDate: toDateInput(item.end_date || item.endDate),
     image: item.image || "",
@@ -416,6 +214,7 @@ function buildPayload(program) {
     status: program.status || "Draft",
     instructor: program.instructor || "",
     students: Number(program.students || 0),
+    price: Number(program.price || 0),
     start_date: program.startDate || null,
     end_date: program.endDate || null,
     image: program.image || "",
@@ -438,12 +237,8 @@ export default function ProgramDetails() {
   const location = useLocation();
 
   const fallbackProgram = useMemo(
-    () =>
-      normalizeProgram(
-        location.state?.program ||
-          samplePrograms.find((item) => String(item.id) === String(id))
-      ),
-    [id, location.state]
+    () => normalizeProgram(location.state?.program),
+    [location.state]
   );
 
   const [program, setProgram] = useState(fallbackProgram);
@@ -601,6 +396,18 @@ export default function ProgramDetails() {
   const shiftCount = program?.shifts?.length || 0;
   const totalShiftCapacity = getTotalShiftCapacity(program?.shifts || []);
 
+  const statItems = [
+    { label: "Category", value: program?.category || "-" },
+    { label: "Duration", value: program?.duration || "-" },
+    { label: "Level", value: program?.level || "-" },
+    { label: "Format", value: program?.format || "-" },
+    { label: "Instructor", value: program?.instructor || "-" },
+    { label: "Students", value: program?.students ?? 0 },
+    { label: "Price", value: formatPriceLabel(program?.price) },
+    { label: "Shifts", value: shiftCount },
+    { label: "Capacity", value: totalShiftCapacity },
+  ];
+
   return (
     <div className="space-y-4 pb-6">
       {error ? (
@@ -655,15 +462,14 @@ export default function ProgramDetails() {
 
       <div className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-8">
-            <MiniStat label="Category" value={program?.category || "-"} />
-            <MiniStat label="Duration" value={program?.duration || "-"} />
-            <MiniStat label="Level" value={program?.level || "-"} />
-            <MiniStat label="Format" value={program?.format || "-"} />
-            <MiniStat label="Instructor" value={program?.instructor || "-"} />
-            <MiniStat label="Students" value={program?.students ?? 0} />
-            <MiniStat label="Shifts" value={shiftCount} />
-            <MiniStat label="Capacity" value={totalShiftCapacity} />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+            {statItems.map((item) => (
+              <MiniStat
+                key={item.label}
+                label={item.label}
+                value={item.value}
+              />
+            ))}
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -757,6 +563,7 @@ export default function ProgramDetails() {
                 <StatusBadge status={program?.status} compact />
               </MetaRow>
               <MetaRow label="Code">{program?.code || "-"}</MetaRow>
+              <MetaRow label="Price">{formatPriceLabel(program?.price)}</MetaRow>
               <MetaRow label="Start">{formatDateLabel(program?.startDate)}</MetaRow>
               <MetaRow label="End">{formatDateLabel(program?.endDate)}</MetaRow>
               <MetaRow label="Instructor">{program?.instructor || "-"}</MetaRow>
@@ -917,6 +724,10 @@ function OverviewPanel({ program }) {
               label="Format"
               value={program?.format || "-"}
             />
+            <SmallInfoCard
+              label="Price"
+              value={formatPriceLabel(program?.price)}
+            />
           </div>
         </div>
 
@@ -1068,11 +879,14 @@ function CompactTextCard({ title, text }) {
 
 function MiniStat({ label, value }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+    <div
+      title={String(value ?? "")}
+      className="rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm"
+    >
+      <div className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 sm:text-[11px]">
         {label}
       </div>
-      <div className="mt-1.5 break-words text-sm font-semibold text-slate-900">
+      <div className="mt-1.5 min-h-[2.5rem] whitespace-normal break-words text-sm font-semibold leading-5 text-slate-900 sm:text-[15px]">
         {value}
       </div>
     </div>
@@ -1182,6 +996,7 @@ function ProgramEditModal({ open, program, saving, onClose, onSave }) {
     status: "Draft",
     instructor: "",
     students: "",
+    price: "",
     startDate: "",
     endDate: "",
     image: "",
@@ -1205,6 +1020,7 @@ function ProgramEditModal({ open, program, saving, onClose, onSave }) {
         status: program.status || "Draft",
         instructor: program.instructor || "",
         students: String(program.students ?? ""),
+        price: String(program.price ?? ""),
         startDate: program.startDate || "",
         endDate: program.endDate || "",
         image: program.image || "",
@@ -1227,6 +1043,8 @@ function ProgramEditModal({ open, program, saving, onClose, onSave }) {
           ? checked
           : name === "students"
           ? value.replace(/\D/g, "")
+          : name === "price"
+          ? sanitizePrice(value)
           : value,
     }));
   }
@@ -1259,6 +1077,7 @@ function ProgramEditModal({ open, program, saving, onClose, onSave }) {
       ...program,
       ...form,
       students: Number(form.students || 0),
+      price: Number(form.price || 0),
     });
   }
 
@@ -1374,6 +1193,15 @@ function ProgramEditModal({ open, program, saving, onClose, onSave }) {
                   label="Students"
                   name="students"
                   value={form.students}
+                  onChange={handleChange}
+                />
+                <Field
+                  label="Price"
+                  name="price"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.price}
                   onChange={handleChange}
                 />
                 <Field
