@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import Layouts from "../components/Layouts";
 import DashboardLayouts from "../components/DashboardLayouts";
@@ -21,6 +21,7 @@ import ProgramDetails from "../dashboard/ProgramDetails";
 import UsersRoles from "../dashboard/UsersRoles";
 import ServiceDirectory from "../dashboard/ServiceDirectory";
 import SystemSetting from "../dashboard/SystemSetting";
+import Internaship from "../dashboard/Internaship";
 
 export default function AppRoutes() {
   const location = useLocation();
@@ -46,10 +47,19 @@ export default function AppRoutes() {
 
         <Route path="/dashboard" element={<DashboardLayouts />}>
           <Route index element={<AdminDashboard />} />
+
           <Route path="programs" element={<Program />} />
           <Route path="programs/:id" element={<ProgramDetails />} />
+
           <Route path="applications" element={<ApplicationReceived />} />
           <Route path="applications/:id" element={<ApplicationDetails />} />
+
+          <Route path="internaship" element={<Internaship />} />
+          <Route
+            path="internship"
+            element={<Navigate to="/dashboard/internaship" replace />}
+          />
+
           <Route path="users" element={<UsersRoles />} />
           <Route path="service-directory" element={<ServiceDirectory />} />
           <Route path="settings" element={<SystemSetting />} />
@@ -58,7 +68,7 @@ export default function AppRoutes() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
-      {!hideChatWidget && <CustomerChatWidget />}
+      {!hideChatWidget ? <CustomerChatWidget /> : null}
     </>
   );
 }

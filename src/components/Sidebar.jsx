@@ -1,5 +1,13 @@
 import { NavLink, useNavigate } from "react-router-dom";
 
+function parseStoredUser(value) {
+  try {
+    return JSON.parse(value || "{}");
+  } catch {
+    return {};
+  }
+}
+
 export default function Sidebar({ open = true, onClose = () => {} }) {
   const navigate = useNavigate();
 
@@ -10,7 +18,7 @@ export default function Sidebar({ open = true, onClose = () => {} }) {
     sessionStorage.getItem("auth_user") ||
     "{}";
 
-  const user = JSON.parse(storedUser || "{}");
+  const user = parseStoredUser(storedUser);
   const name = user?.name || "Admin User";
   const email = user?.email || "admin@asyncafrica.com";
   const role =
@@ -51,8 +59,8 @@ export default function Sidebar({ open = true, onClose = () => {} }) {
         className={[
           "fixed inset-0 z-40 bg-black/60 backdrop-blur-[2px] transition-opacity duration-300 lg:hidden",
           open
-            ? "opacity-100 pointer-events-auto"
-            : "opacity-0 pointer-events-none",
+            ? "pointer-events-auto opacity-100"
+            : "pointer-events-none opacity-0",
         ].join(" ")}
       />
 
@@ -64,7 +72,7 @@ export default function Sidebar({ open = true, onClose = () => {} }) {
           open ? "translate-x-0" : "-translate-x-full",
         ].join(" ")}
       >
-        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top_right,rgba(122,108,245,0.16),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(96,80,240,0.14),transparent_30%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(122,108,245,0.16),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(96,80,240,0.14),transparent_30%)]" />
 
         <div className="relative flex h-full flex-col">
           <div className="flex items-center justify-between border-b border-white/10 px-3 py-3">
@@ -78,7 +86,9 @@ export default function Sidebar({ open = true, onClose = () => {} }) {
               </div>
 
               <div className="min-w-0">
-                <div className="truncate text-sm font-extrabold">AsyncAfrica</div>
+                <div className="truncate text-sm font-extrabold">
+                  AsyncAfrica
+                </div>
                 <div className="text-[11px] text-white/65">
                   {String(role).toLowerCase() === "admin"
                     ? "Admin Panel"
@@ -117,7 +127,7 @@ export default function Sidebar({ open = true, onClose = () => {} }) {
               onClick={handleMobileClose}
             />
             <Item
-              to="/dashboard/internships"
+              to="/dashboard/internaship"
               label="Internship"
               icon={<IconInternship />}
               onClick={handleMobileClose}
