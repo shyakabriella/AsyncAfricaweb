@@ -19,7 +19,7 @@ import Contact from "../pages/Contact";
 
 import Program from "../dashboard/Program";
 import ProgramDetails from "../dashboard/ProgramDetails";
-import UsersRoles from "../dashboard/UsersRoles";
+import User from "../dashboard/User";
 import ServiceDirectory from "../dashboard/ServiceDirectory";
 import SystemSetting from "../dashboard/SystemSetting";
 import Internaship from "../dashboard/Internaship";
@@ -210,7 +210,7 @@ export default function AppRoutes() {
             path="users"
             element={
               <RequireRole allowedRoles={["admin"]}>
-                <UsersRoles />
+                <User />
               </RequireRole>
             }
           />

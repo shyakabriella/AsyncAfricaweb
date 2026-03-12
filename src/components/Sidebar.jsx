@@ -64,23 +64,17 @@ function getRoleFromUser(user) {
   }
 
   const roleArrays = [Array.isArray(user?.roles) ? user.roles : []];
-
   const foundRoles = [];
 
   for (const arr of roleArrays) {
     for (const item of arr) {
       const found = normalizeRole(item?.slug || item?.name || item);
-      if (isKnownRole(found)) {
-        foundRoles.push(found);
-      }
+      if (isKnownRole(found)) foundRoles.push(found);
     }
   }
 
   const uniqueRoles = [...new Set(foundRoles)];
-
-  if (uniqueRoles.length === 1) {
-    return uniqueRoles[0];
-  }
+  if (uniqueRoles.length === 1) return uniqueRoles[0];
 
   return "";
 }
@@ -171,7 +165,6 @@ export default function Sidebar({ open = true, onClose = () => {} }) {
   const navigate = useNavigate();
 
   const user = getStoredUser();
-
   const roleFromStorage = getStoredRole();
   const roleFromUser = getRoleFromUser(user);
   const role = normalizeRole(roleFromStorage || roleFromUser || "");
@@ -295,6 +288,12 @@ export default function Sidebar({ open = true, onClose = () => {} }) {
                 {isAdmin && (
                   <>
                     <Item
+                      to="/dashboard/users"
+                      label="User"
+                      icon={<IconUsers />}
+                      onClick={handleMobileClose}
+                    />
+                    <Item
                       to="/dashboard/programs"
                       label="Program"
                       icon={<IconProgram />}
@@ -328,14 +327,12 @@ export default function Sidebar({ open = true, onClose = () => {} }) {
                 )}
 
                 {isCeo && (
-                  <>
-                    <Item
-                      to="/dashboard/reports"
-                      label="Report"
-                      icon={<IconReport />}
-                      onClick={handleMobileClose}
-                    />
-                  </>
+                  <Item
+                    to="/dashboard/reports"
+                    label="Report"
+                    icon={<IconReport />}
+                    onClick={handleMobileClose}
+                  />
                 )}
               </>
             )}
@@ -377,7 +374,12 @@ function Item({ to, label, icon, onClick }) {
   return (
     <NavLink
       to={to}
-      end={to === "/dashboard" || to === "/dashboard/admin" || to === "/dashboard/ceo" || to === "/dashboard/trainer"}
+      end={
+        to === "/dashboard" ||
+        to === "/dashboard/admin" ||
+        to === "/dashboard/ceo" ||
+        to === "/dashboard/trainer"
+      }
       onClick={onClick}
       className={({ isActive }) =>
         [
@@ -402,6 +404,22 @@ function IconDashboard() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
       <path
         d="M4 13h7V4H4v9Zm9 7h7V11h-7v9ZM4 20h7v-5H4v5Zm9-9h7V4h-7v7Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function IconUsers() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM8 12a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"
+        fill="currentColor"
+        opacity="0.9"
+      />
+      <path
+        d="M8 14c-3.2 0-5.5 1.8-5.5 4v1h11v-1c0-2.2-2.3-4-5.5-4Zm8 0c-.6 0-1.2.07-1.75.2 1.1.84 1.75 1.95 1.75 3.3v1H22v-.8c0-2.1-2.3-3.7-6-3.7Z"
         fill="currentColor"
       />
     </svg>
