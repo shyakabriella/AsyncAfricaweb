@@ -1180,7 +1180,7 @@ export default function Application({
                   Select
                 </option>
                 <option value="High School" className="bg-[#111827] text-white">
-                  High School
+                  High School/TVET
                 </option>
                 <option value="Certificate" className="bg-[#111827] text-white">
                   Certificate
@@ -1194,15 +1194,8 @@ export default function Application({
                 >
                   Bachelor's Degree
                 </option>
-                <option
-                  value="Master's Degree"
-                  className="bg-[#111827] text-white"
-                >
-                  Master's Degree
-                </option>
-                <option value="Other" className="bg-[#111827] text-white">
-                  Other
-                </option>
+              
+            
               </SelectField>
 
               <Field
