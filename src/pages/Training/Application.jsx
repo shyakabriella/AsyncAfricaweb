@@ -564,10 +564,6 @@ function ShiftCard({ shift, active, onSelect }) {
             </div>
           </div>
 
-          <p className="mt-1 text-xs text-gray-300">
-            {formatTime(shift.startTime)} - {formatTime(shift.endTime)}
-          </p>
-
           {shift.message ? (
             <p className="mt-1 text-[11px] text-gray-400">{shift.message}</p>
           ) : null}
@@ -910,13 +906,7 @@ export default function Application({
               />
               <SummaryLine
                 label="Shift"
-                value={
-                  selectedShift
-                    ? `${selectedShift.name} (${formatTime(
-                        selectedShift.startTime
-                      )} - ${formatTime(selectedShift.endTime)})`
-                    : "Will be assigned later"
-                }
+                value={selectedShift ? selectedShift.name : "Will be assigned later"}
               />
             </div>
           </div>
@@ -1194,8 +1184,6 @@ export default function Application({
                 >
                   Bachelor's Degree
                 </option>
-              
-            
               </SelectField>
 
               <Field
@@ -1367,13 +1355,7 @@ export default function Application({
                   />
                   <SummaryLine
                     label="Shift"
-                    value={
-                      selectedShift
-                        ? `${selectedShift.name} (${formatTime(
-                            selectedShift.startTime
-                          )} - ${formatTime(selectedShift.endTime)})`
-                        : "No shift selected"
-                    }
+                    value={selectedShift ? selectedShift.name : "No shift selected"}
                   />
                 </div>
               </div>
