@@ -9,11 +9,37 @@ export default function Layouts() {
     window.scrollTo(0, 0);
   }, [location.pathname]);
 
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const root = document.getElementById("root");
+
+    const prevHtmlOverflowX = html.style.overflowX;
+    const prevBodyOverflowX = body.style.overflowX;
+    const prevRootOverflowX = root?.style.overflowX || "";
+
+    html.style.overflowX = "hidden";
+    body.style.overflowX = "hidden";
+
+    if (root) {
+      root.style.overflowX = "hidden";
+    }
+
+    return () => {
+      html.style.overflowX = prevHtmlOverflowX;
+      body.style.overflowX = prevBodyOverflowX;
+
+      if (root) {
+        root.style.overflowX = prevRootOverflowX;
+      }
+    };
+  }, []);
+
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="flex min-h-screen flex-col overflow-x-hidden bg-black text-white">
       <NavHeader />
 
-      <main>
+      <main className="min-w-0 flex-1 overflow-x-hidden">
         <Outlet />
       </main>
 
@@ -35,27 +61,27 @@ export default function Layouts() {
               </h4>
               <ul className="space-y-2 text-sm text-gray-300">
                 <li>
-                  <Link to="/about" className="hover:text-[#7A6CF5] transition">
+                  <Link to="/about" className="transition hover:text-[#7A6CF5]">
                     About Us
                   </Link>
                 </li>
                 <li>
                   <Link
                     to="/projects"
-                    className="hover:text-[#7A6CF5] transition"
+                    className="transition hover:text-[#7A6CF5]"
                   >
                     Projects
                   </Link>
                 </li>
                 <li>
-                  <Link to="/blog" className="hover:text-[#7A6CF5] transition">
+                  <Link to="/blog" className="transition hover:text-[#7A6CF5]">
                     Blog
                   </Link>
                 </li>
                 <li>
                   <Link
                     to="/contact"
-                    className="hover:text-[#7A6CF5] transition"
+                    className="transition hover:text-[#7A6CF5]"
                   >
                     Contact
                   </Link>
@@ -71,7 +97,7 @@ export default function Layouts() {
                 <li>
                   <Link
                     to="/services/software-development"
-                    className="hover:text-[#7A6CF5] transition"
+                    className="transition hover:text-[#7A6CF5]"
                   >
                     Software Development
                   </Link>
@@ -79,7 +105,7 @@ export default function Layouts() {
                 <li>
                   <Link
                     to="/services/networking"
-                    className="hover:text-[#7A6CF5] transition"
+                    className="transition hover:text-[#7A6CF5]"
                   >
                     Networking
                   </Link>
@@ -87,7 +113,7 @@ export default function Layouts() {
                 <li>
                   <Link
                     to="/services/ai-solutions"
-                    className="hover:text-[#7A6CF5] transition"
+                    className="transition hover:text-[#7A6CF5]"
                   >
                     AI Solutions
                   </Link>
@@ -95,7 +121,7 @@ export default function Layouts() {
                 <li>
                   <Link
                     to="/services/iot-solutions"
-                    className="hover:text-[#7A6CF5] transition"
+                    className="transition hover:text-[#7A6CF5]"
                   >
                     IoT Solutions
                   </Link>
@@ -103,7 +129,7 @@ export default function Layouts() {
                 <li>
                   <Link
                     to="/services/robotics"
-                    className="hover:text-[#7A6CF5] transition"
+                    className="transition hover:text-[#7A6CF5]"
                   >
                     Robotics
                   </Link>
@@ -111,7 +137,7 @@ export default function Layouts() {
                 <li>
                   <Link
                     to="/services/cybersecurity"
-                    className="hover:text-[#7A6CF5] transition"
+                    className="transition hover:text-[#7A6CF5]"
                   >
                     Cybersecurity
                   </Link>
@@ -127,7 +153,7 @@ export default function Layouts() {
                 <li>
                   <Link
                     to="/training"
-                    className="hover:text-[#7A6CF5] transition"
+                    className="transition hover:text-[#7A6CF5]"
                   >
                     Training Overview
                   </Link>
@@ -135,7 +161,7 @@ export default function Layouts() {
                 <li>
                   <Link
                     to="/training/courses"
-                    className="hover:text-[#7A6CF5] transition"
+                    className="transition hover:text-[#7A6CF5]"
                   >
                     Courses
                   </Link>
@@ -143,7 +169,7 @@ export default function Layouts() {
                 <li>
                   <Link
                     to="/training/corporate-training"
-                    className="hover:text-[#7A6CF5] transition"
+                    className="transition hover:text-[#7A6CF5]"
                   >
                     Corporate Training
                   </Link>
@@ -151,7 +177,7 @@ export default function Layouts() {
                 <li>
                   <Link
                     to="/training/bootcamps"
-                    className="hover:text-[#7A6CF5] transition"
+                    className="transition hover:text-[#7A6CF5]"
                   >
                     Workshops & Bootcamps
                   </Link>
@@ -162,7 +188,7 @@ export default function Layouts() {
 
           <div className="mt-10 flex flex-col gap-3 border-t border-white/10 pt-6 text-sm text-gray-400 sm:flex-row sm:items-center sm:justify-between">
             <p>© {new Date().getFullYear()} AsyncAfrica. All rights reserved.</p>
-            <p className="text-[#7A6CF5]">Built with innovation for Africa </p>
+            <p className="text-[#7A6CF5]">Built with innovation for Africa</p>
           </div>
         </div>
       </footer>

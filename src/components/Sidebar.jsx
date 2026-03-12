@@ -8,40 +8,196 @@ function parseStoredUser(value) {
   }
 }
 
+function normalizeRole(value) {
+  if (!value) return "";
+
+  if (typeof value === "object") {
+    return normalizeRole(
+      value?.slug ||
+        value?.name ||
+        value?.role ||
+        value?.title ||
+        ""
+    );
+  }
+
+  const role = String(value).trim().toLowerCase();
+
+  if (role === "administrator") return "admin";
+  if (role === "admin") return "admin";
+  if (role === "super admin") return "admin";
+  if (role === "super_admin") return "admin";
+  if (role === "super-admin") return "admin";
+
+  if (role === "chief executive officer") return "ceo";
+  if (role === "chief-executive-officer") return "ceo";
+  if (role === "chief_executive_officer") return "ceo";
+  if (role === "ceo") return "ceo";
+
+  if (role === "trainer") return "trainer";
+  if (role === "trainers") return "trainer";
+
+  if (role === "student") return "student";
+  if (role === "students") return "student";
+
+  return role;
+}
+
+function isKnownRole(role) {
+  return ["admin", "ceo", "trainer", "student"].includes(
+    normalizeRole(role)
+  );
+}
+
+function getRoleFromUser(user) {
+  if (!user) return "";
+
+  const directCandidates = [
+    user?.role?.slug,
+    user?.role?.name,
+    user?.role,
+  ];
+
+  for (const item of directCandidates) {
+    const found = normalizeRole(item);
+    if (isKnownRole(found)) return found;
+  }
+
+  const roleArrays = [Array.isArray(user?.roles) ? user.roles : []];
+
+  const foundRoles = [];
+
+  for (const arr of roleArrays) {
+    for (const item of arr) {
+      const found = normalizeRole(item?.slug || item?.name || item);
+      if (isKnownRole(found)) {
+        foundRoles.push(found);
+      }
+    }
+  }
+
+  const uniqueRoles = [...new Set(foundRoles)];
+
+  if (uniqueRoles.length === 1) {
+    return uniqueRoles[0];
+  }
+
+  return "";
+}
+
+function getStoredUser() {
+  const localUser = parseStoredUser(localStorage.getItem("user"));
+  const sessionUser = parseStoredUser(sessionStorage.getItem("user"));
+  const localAuthUser = parseStoredUser(localStorage.getItem("auth_user"));
+  const sessionAuthUser = parseStoredUser(sessionStorage.getItem("auth_user"));
+
+  if (localUser && Object.keys(localUser).length > 0) return localUser;
+  if (sessionUser && Object.keys(sessionUser).length > 0) return sessionUser;
+  if (localAuthUser && Object.keys(localAuthUser).length > 0) return localAuthUser;
+  if (sessionAuthUser && Object.keys(sessionAuthUser).length > 0) return sessionAuthUser;
+
+  return {};
+}
+
+function getStoredRole() {
+  const localRole = normalizeRole(localStorage.getItem("role") || "");
+  const sessionRole = normalizeRole(sessionStorage.getItem("role") || "");
+
+  if (isKnownRole(sessionRole)) return sessionRole;
+  if (isKnownRole(localRole)) return localRole;
+
+  return "";
+}
+
+function getPanelLabel(role) {
+  switch (normalizeRole(role)) {
+    case "admin":
+      return "Admin Panel";
+    case "ceo":
+      return "CEO Panel";
+    case "trainer":
+      return "Trainer Panel";
+    case "student":
+      return "Student Panel";
+    default:
+      return "User Panel";
+  }
+}
+
+function getDashboardHomePath(role) {
+  switch (normalizeRole(role)) {
+    case "admin":
+      return "/dashboard/admin";
+    case "ceo":
+      return "/dashboard/ceo";
+    case "trainer":
+      return "/dashboard/trainer";
+    default:
+      return "/dashboard";
+  }
+}
+
+function getDefaultName(role) {
+  switch (normalizeRole(role)) {
+    case "admin":
+      return "Admin User";
+    case "ceo":
+      return "CEO User";
+    case "trainer":
+      return "Trainer User";
+    case "student":
+      return "Student User";
+    default:
+      return "User";
+  }
+}
+
+function getDefaultEmail(role) {
+  switch (normalizeRole(role)) {
+    case "admin":
+      return "admin@asyncafrica.com";
+    case "ceo":
+      return "ceo@asyncafrica.com";
+    case "trainer":
+      return "trainer@asyncafrica.com";
+    case "student":
+      return "student@asyncafrica.com";
+    default:
+      return "user@asyncafrica.com";
+  }
+}
+
 export default function Sidebar({ open = true, onClose = () => {} }) {
   const navigate = useNavigate();
 
-  const storedUser =
-    localStorage.getItem("user") ||
-    sessionStorage.getItem("user") ||
-    localStorage.getItem("auth_user") ||
-    sessionStorage.getItem("auth_user") ||
-    "{}";
+  const user = getStoredUser();
 
-  const user = parseStoredUser(storedUser);
-  const name = user?.name || "Admin User";
-  const email = user?.email || "admin@asyncafrica.com";
-  const role =
-    localStorage.getItem("role") ||
-    sessionStorage.getItem("role") ||
-    user?.role?.slug ||
-    user?.role ||
-    "admin";
+  const roleFromStorage = getStoredRole();
+  const roleFromUser = getRoleFromUser(user);
+  const role = normalizeRole(roleFromStorage || roleFromUser || "");
+
+  const name = user?.name || getDefaultName(role);
+  const email = user?.email || getDefaultEmail(role);
+
+  const isTrainer = role === "trainer";
+  const isCeo = role === "ceo";
+  const isAdmin = role === "admin";
 
   const logout = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("access_token");
     localStorage.removeItem("user");
+    localStorage.removeItem("auth_user");
     localStorage.removeItem("role");
     localStorage.removeItem("remember_email");
 
     sessionStorage.removeItem("token");
-    sessionStorage.removeItem("user");
-    sessionStorage.removeItem("role");
-
-    localStorage.removeItem("auth_token");
-    localStorage.removeItem("auth_user");
     sessionStorage.removeItem("auth_token");
+    sessionStorage.removeItem("access_token");
+    sessionStorage.removeItem("user");
     sessionStorage.removeItem("auth_user");
+    sessionStorage.removeItem("role");
 
     navigate("/login", { replace: true });
   };
@@ -90,9 +246,7 @@ export default function Sidebar({ open = true, onClose = () => {} }) {
                   AsyncAfrica
                 </div>
                 <div className="text-[11px] text-white/65">
-                  {String(role).toLowerCase() === "admin"
-                    ? "Admin Panel"
-                    : "User Panel"}
+                  {getPanelLabel(role)}
                 </div>
               </div>
             </div>
@@ -108,42 +262,83 @@ export default function Sidebar({ open = true, onClose = () => {} }) {
           </div>
 
           <nav className="space-y-1 px-2 py-3">
-            <Item
-              to="/dashboard"
-              label="Dashboard"
-              icon={<IconDashboard />}
-              onClick={handleMobileClose}
-            />
-            <Item
-              to="/dashboard/programs"
-              label="Program"
-              icon={<IconProgram />}
-              onClick={handleMobileClose}
-            />
-            <Item
-              to="/dashboard/applications"
-              label="Application"
-              icon={<IconApplication />}
-              onClick={handleMobileClose}
-            />
-            <Item
-              to="/dashboard/internaship"
-              label="Internship"
-              icon={<IconInternship />}
-              onClick={handleMobileClose}
-            />
-            <Item
-              to="/dashboard/reports"
-              label="Report"
-              icon={<IconReport />}
-              onClick={handleMobileClose}
-            />
-            <Item
-              to="/dashboard/settings"
-              label="Setting"
-              icon={<IconSettings />}
-              onClick={handleMobileClose}
-            />
+            {isTrainer ? (
+              <>
+                <Item
+                  to="/dashboard/trainer"
+                  label="Dashboard"
+                  icon={<IconDashboard />}
+                  onClick={handleMobileClose}
+                />
+                <Item
+                  to="/dashboard/internaship"
+                  label="Internship"
+                  icon={<IconInternship />}
+                  onClick={handleMobileClose}
+                />
+                <Item
+                  to="/dashboard/wallet"
+                  label="Wallet"
+                  icon={<IconWallet />}
+                  onClick={handleMobileClose}
+                />
+              </>
+            ) : (
+              <>
+                <Item
+                  to={getDashboardHomePath(role)}
+                  label="Dashboard"
+                  icon={<IconDashboard />}
+                  onClick={handleMobileClose}
+                />
+
+                {isAdmin && (
+                  <>
+                    <Item
+                      to="/dashboard/programs"
+                      label="Program"
+                      icon={<IconProgram />}
+                      onClick={handleMobileClose}
+                    />
+                    <Item
+                      to="/dashboard/applications"
+                      label="Application"
+                      icon={<IconApplication />}
+                      onClick={handleMobileClose}
+                    />
+                    <Item
+                      to="/dashboard/internaship"
+                      label="Internship"
+                      icon={<IconInternship />}
+                      onClick={handleMobileClose}
+                    />
+                    <Item
+                      to="/dashboard/reports"
+                      label="Report"
+                      icon={<IconReport />}
+                      onClick={handleMobileClose}
+                    />
+                    <Item
+                      to="/dashboard/settings"
+                      label="Setting"
+                      icon={<IconSettings />}
+                      onClick={handleMobileClose}
+                    />
+                  </>
+                )}
+
+                {isCeo && (
+                  <>
+                    <Item
+                      to="/dashboard/reports"
+                      label="Report"
+                      icon={<IconReport />}
+                      onClick={handleMobileClose}
+                    />
+                  </>
+                )}
+              </>
+            )}
           </nav>
 
           <div className="mt-auto border-t border-white/10 p-3">
@@ -182,7 +377,7 @@ function Item({ to, label, icon, onClick }) {
   return (
     <NavLink
       to={to}
-      end={to === "/dashboard"}
+      end={to === "/dashboard" || to === "/dashboard/admin" || to === "/dashboard/ceo" || to === "/dashboard/trainer"}
       onClick={onClick}
       className={({ isActive }) =>
         [
@@ -249,6 +444,23 @@ function IconInternship() {
         d="M9 4h6l1 2h3a2 2 0 0 1 2 2v3H3V8a2 2 0 0 1 2-2h3l1-2Zm12 8v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6h6v2h6v-2h6Z"
         fill="currentColor"
       />
+    </svg>
+  );
+}
+
+function IconWallet() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M4 7a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v1H6a2 2 0 0 0-2 2V7Z"
+        fill="currentColor"
+        opacity="0.65"
+      />
+      <path
+        d="M4 10a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7Z"
+        fill="currentColor"
+      />
+      <circle cx="16.5" cy="13.5" r="1.5" fill="#0B0B14" />
     </svg>
   );
 }

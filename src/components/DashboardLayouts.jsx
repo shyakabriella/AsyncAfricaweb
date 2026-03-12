@@ -1,12 +1,132 @@
-import { useEffect, useState } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import Footer from "./Footer";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
+import {
+  getAuthState,
+  getDashboardPathByRole,
+  normalizeRole,
+  isKnownRole,
+} from "../lib/auth";
+
+function getBaseDashboardTitle(role) {
+  switch (normalizeRole(role)) {
+    case "admin":
+      return "Admin Dashboard";
+    case "ceo":
+      return "CEO Dashboard";
+    case "trainer":
+      return "Trainer Dashboard";
+    case "student":
+      return "Student Dashboard";
+    default:
+      return "Dashboard";
+  }
+}
+
+function getTitle(path, role) {
+  const normalizedRole = normalizeRole(role);
+
+  if (
+    path === "/dashboard" ||
+    path === "/dashboard/admin" ||
+    path === "/dashboard/ceo" ||
+    path === "/dashboard/trainer"
+  ) {
+    return getBaseDashboardTitle(normalizedRole);
+  }
+
+  if (path.includes("/dashboard/programs")) {
+    return normalizedRole === "trainer"
+      ? "Training Programs"
+      : "Program Management";
+  }
+
+  if (
+    path.includes("/dashboard/internaship") ||
+    path.includes("/dashboard/internship")
+  ) {
+    return "Internship Management";
+  }
+
+  if (path.includes("/dashboard/wallet")) {
+    return "Trainer Wallet";
+  }
+
+  if (path.includes("/dashboard/applications")) {
+    return "Applications";
+  }
+
+  if (path.includes("/dashboard/users")) {
+    return "Users & Roles";
+  }
+
+  if (path.includes("/dashboard/service-directory")) {
+    return "Service Directory";
+  }
+
+  if (path.includes("/dashboard/settings")) {
+    return "System Settings";
+  }
+
+  if (path.includes("/dashboard/reports")) {
+    return "Reports";
+  }
+
+  return getBaseDashboardTitle(normalizedRole);
+}
+
+function isAdminAllowedPath(path) {
+  return (
+    path === "/dashboard" ||
+    path === "/dashboard/admin" ||
+    path.startsWith("/dashboard/programs") ||
+    path.startsWith("/dashboard/applications") ||
+    path.startsWith("/dashboard/internaship") ||
+    path.startsWith("/dashboard/internship") ||
+    path.startsWith("/dashboard/users") ||
+    path.startsWith("/dashboard/service-directory") ||
+    path.startsWith("/dashboard/settings") ||
+    path.startsWith("/dashboard/reports")
+  );
+}
+
+function isTrainerAllowedPath(path) {
+  return (
+    path === "/dashboard" ||
+    path === "/dashboard/trainer" ||
+    path.startsWith("/dashboard/internaship") ||
+    path.startsWith("/dashboard/internship") ||
+    path.startsWith("/dashboard/wallet")
+  );
+}
+
+function isCeoAllowedPath(path) {
+  return path === "/dashboard" || path === "/dashboard/ceo";
+}
+
+function isAllowedPathForRole(path, role) {
+  switch (normalizeRole(role)) {
+    case "admin":
+      return isAdminAllowedPath(path);
+
+    case "ceo":
+      return isCeoAllowedPath(path);
+
+    case "trainer":
+      return isTrainerAllowedPath(path);
+
+    default:
+      return false;
+  }
+}
 
 export default function DashboardLayouts() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const { token, role: currentRole } = getAuthState();
 
   useEffect(() => {
     const media = window.matchMedia("(min-width: 1024px)");
@@ -32,23 +152,46 @@ export default function DashboardLayouts() {
     };
   }, []);
 
+  useEffect(() => {
+    if (window.innerWidth < 1024) {
+      setSidebarOpen(false);
+    }
+  }, [location.pathname]);
+
+  const pageTitle = useMemo(() => {
+    return getTitle(location.pathname, currentRole);
+  }, [location.pathname, currentRole]);
+
   const handleToggleSidebar = () => {
     if (window.innerWidth < 1024) {
       setSidebarOpen((prev) => !prev);
     }
   };
 
+  if (!token || !isKnownRole(currentRole)) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (!isAllowedPathForRole(location.pathname, currentRole)) {
+    return <Navigate to={getDashboardPathByRole(currentRole)} replace />;
+  }
+
   return (
     <div className="flex min-h-screen bg-slate-50">
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        role={currentRole}
+      />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <Header
           onToggleSidebar={handleToggleSidebar}
-          title={getTitle(location.pathname)}
+          title={pageTitle}
+          role={currentRole}
         />
 
-        <main className="relative flex-1 min-w-0 p-4 md:p-6">
+        <main className="relative min-w-0 flex-1 p-4 md:p-6">
           <div className="mx-auto w-full max-w-[1600px]">
             <Outlet />
           </div>
@@ -58,16 +201,4 @@ export default function DashboardLayouts() {
       </div>
     </div>
   );
-}
-
-function getTitle(path) {
-  if (path === "/dashboard") return "Admin Dashboard";
-  if (path.includes("/dashboard/programs")) return "Program Management";
-  if (path.includes("/dashboard/internships")) return "Internship Management";
-  if (path.includes("/dashboard/users")) return "Users & Roles";
-  if (path.includes("/dashboard/inbox")) return "Case Inbox";
-  if (path.includes("/dashboard/service-directory")) return "Service Directory";
-  if (path.includes("/dashboard/reports")) return "Reports & Statistics";
-  if (path.includes("/dashboard/settings")) return "System Settings";
-  return "Dashboard";
 }

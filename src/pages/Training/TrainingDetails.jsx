@@ -54,24 +54,31 @@ function safeShiftArray(value) {
   if (!Array.isArray(source)) return [];
 
   return source
-    .map((item, index) => ({
-      id: item?.id ?? `shift-${index + 1}`,
-      name: item?.name || "",
-      startTime: item?.start_time || item?.startTime || "",
-      endTime: item?.end_time || item?.endTime || "",
-      capacity: Number(item?.capacity ?? item?.volume ?? 0),
-      filled: Number(item?.filled ?? 0),
-      isFull: Boolean(item?.is_full),
-      message: item?.message || "",
-      availableSlots:
+    .map((item, index) => {
+      const capacity = Number(item?.capacity ?? item?.volume ?? 0);
+      const filled = Number(item?.filled ?? 0);
+      const availableSlots =
         item?.available_slots !== undefined
           ? Number(item.available_slots)
-          : Math.max(
-              Number(item?.capacity ?? item?.volume ?? 0) -
-                Number(item?.filled ?? 0),
-              0
-            ),
-    }))
+          : Math.max(capacity - filled, 0);
+
+      const isFull =
+        item?.is_full !== undefined
+          ? Boolean(item.is_full)
+          : availableSlots <= 0 && capacity > 0;
+
+      return {
+        id: item?.id ?? `shift-${index + 1}`,
+        name: item?.name || "",
+        startTime: item?.start_time || item?.startTime || "",
+        endTime: item?.end_time || item?.endTime || "",
+        capacity,
+        filled,
+        isFull,
+        message: item?.message || "",
+        availableSlots,
+      };
+    })
     .filter(
       (item) => item.name || item.startTime || item.endTime || item.capacity > 0
     );
@@ -174,16 +181,6 @@ function getProgramIcon(iconKey, slug, category) {
       <path d="M12 3 2 8l10 5 10-5-10-5Zm-7 9v4c0 1.7 3.1 3 7 3s7-1.3 7-3v-4l-7 3.5L5 12Z" />
     </svg>
   );
-}
-
-function formatTime(value) {
-  if (!value) return "--:--";
-  const parts = String(value).split(":");
-  if (parts.length < 2) return value;
-  return `${String(parts[0]).padStart(2, "0")}:${String(parts[1]).padStart(
-    2,
-    "0"
-  )}`;
 }
 
 function formatPriceRWF(value) {
@@ -397,7 +394,11 @@ export default function TrainingDetails() {
 
       if (platform === "instagram") {
         const copied = await copyTextToClipboard(shareText);
-        window.open("https://www.instagram.com/", "_blank", "noopener,noreferrer");
+        window.open(
+          "https://www.instagram.com/",
+          "_blank",
+          "noopener,noreferrer"
+        );
         setShareNotice(
           copied
             ? "Program link copied. Paste it on Instagram."
@@ -408,7 +409,11 @@ export default function TrainingDetails() {
 
       if (platform === "tiktok") {
         const copied = await copyTextToClipboard(shareText);
-        window.open("https://www.tiktok.com/", "_blank", "noopener,noreferrer");
+        window.open(
+          "https://www.tiktok.com/",
+          "_blank",
+          "noopener,noreferrer"
+        );
         setShareNotice(
           copied
             ? "Program link copied. Paste it on TikTok."
@@ -948,26 +953,33 @@ export default function TrainingDetails() {
                       ) : null}
 
                       <div className="mt-4 space-y-3">
-                        {program.shifts.map((shift) => (
+                        {program.shifts.map((shift, index) => (
                           <div
                             key={shift.id}
                             className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4"
                           >
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                               <div>
                                 <h4 className="text-sm font-bold text-white sm:text-base">
-                                  {shift.name || "Shift"}
+                                  {shift.name || `Shift ${index + 1}`}
                                 </h4>
-                                <p className="mt-1 text-sm text-gray-300">
-                                  {formatTime(shift.startTime)} -{" "}
-                                  {formatTime(shift.endTime)}
-                                </p>
+
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] font-semibold text-gray-200">
+                                    Capacity: {shift.capacity}
+                                  </span>
+
+                                  <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] font-semibold text-gray-200">
+                                    Filled: {shift.filled}
+                                  </span>
+
+                                  <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] font-semibold text-gray-200">
+                                    Open Slots: {shift.availableSlots}
+                                  </span>
+                                </div>
                               </div>
 
                               <div className="flex flex-wrap items-center gap-2">
-                                <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] font-semibold text-gray-200">
-                                  Capacity: {shift.capacity}
-                                </span>
                                 <span
                                   className={`rounded-full px-3 py-1 text-[11px] font-semibold ${
                                     shift.isFull

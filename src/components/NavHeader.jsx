@@ -13,9 +13,9 @@ const servicesMenu = [
 
 const trainingMenu = [
   { name: "Training Overview", href: "/training" },
-  { name: "Courses", href: "/training/courses" },
-  { name: "Corporate Training", href: "/training/corporate-training" },
-  { name: "Workshops & Bootcamps", href: "/training/bootcamps" },
+  // { name: "Courses", href: "/training/courses" },
+  // { name: "Corporate Training", href: "/training/corporate-training" },
+  // { name: "Workshops & Bootcamps", href: "/training/bootcamps" },
 ];
 
 const mainLinks = [
@@ -296,12 +296,7 @@ export default function NavHeader() {
                     : "pointer-events-none -translate-y-2 scale-95 opacity-0"
                 }`}
               >
-                <div className="border-b border-slate-100 bg-gradient-to-r from-[#6050F0]/10 to-transparent px-5 py-4">
-                  <p className="text-sm font-semibold text-slate-900">Our Services</p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Smart solutions for modern businesses and institutions.
-                  </p>
-                </div>
+                
 
                 <div className="p-2">
                   {servicesMenu.map((item) => (
@@ -347,12 +342,7 @@ export default function NavHeader() {
                     : "pointer-events-none -translate-y-2 scale-95 opacity-0"
                 }`}
               >
-                <div className="border-b border-slate-100 bg-gradient-to-r from-[#6050F0]/10 to-transparent px-5 py-4">
-                  <p className="text-sm font-semibold text-slate-900">AsyncAfrica Academy</p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Practical digital skills and future-ready learning.
-                  </p>
-                </div>
+                
 
                 <div className="p-2">
                   {trainingMenu.map((item) => (
