@@ -47,6 +47,27 @@ function getHeaders(isJson = true) {
   };
 }
 
+function extractValidationErrors(result) {
+  if (result?.data && typeof result.data === "object" && !Array.isArray(result.data)) {
+    return result.data;
+  }
+
+  if (result?.errors && typeof result.errors === "object" && !Array.isArray(result.errors)) {
+    return result.errors;
+  }
+
+  return {};
+}
+
+function getFirstValidationMessage(validation) {
+  const values = Object.values(validation || {});
+  for (const value of values) {
+    if (Array.isArray(value) && value.length) return value[0];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return "";
+}
+
 async function apiRequest(endpoint, options = {}) {
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
@@ -59,16 +80,39 @@ async function apiRequest(endpoint, options = {}) {
   const result = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    const validation = extractValidationErrors(result);
+    const firstValidationMessage = getFirstValidationMessage(validation);
+
     const message =
+      firstValidationMessage ||
       result?.message ||
       result?.error ||
-      result?.errors?.email?.[0] ||
-      result?.errors?.name?.[0] ||
       "Request failed.";
-    throw new Error(message);
+
+    const error = new Error(message);
+    error.status = response.status;
+    error.validation = validation;
+    error.result = result;
+    throw error;
   }
 
   return result;
+}
+
+async function getProgramOptions() {
+  const endpoints = ["/users-program-options", "/programs"];
+
+  let lastError = null;
+
+  for (const endpoint of endpoints) {
+    try {
+      return await apiRequest(endpoint);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error("Could not load programs.");
 }
 
 function normalizeRoleLabel(role) {
@@ -88,9 +132,9 @@ function roleBadgeClass(role) {
 }
 
 function statusBadgeClass(status) {
-  return status === "active"
-    ? "bg-emerald-500/15 text-emerald-200"
-    : "bg-rose-500/15 text-rose-200";
+  if (status === "active") return "bg-emerald-500/15 text-emerald-200";
+  if (status === "suspended") return "bg-amber-500/15 text-amber-200";
+  return "bg-rose-500/15 text-rose-200";
 }
 
 function normalizePrograms(programs) {
@@ -221,7 +265,7 @@ export default function User() {
 
       const [usersRes, programsRes] = await Promise.all([
         apiRequest("/users"),
-        apiRequest("/programs"),
+        getProgramOptions(),
       ]);
 
       const rawUsers = Array.isArray(usersRes?.data)
@@ -303,6 +347,11 @@ export default function User() {
     resetForm();
   }
 
+  function updateField(key, value) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    setErrors((prev) => ({ ...prev, [key]: "", submit: "" }));
+  }
+
   function toggleProgram(programId) {
     setForm((prev) => {
       const exists = prev.programIds.includes(programId);
@@ -330,14 +379,23 @@ export default function User() {
       nextErrors.email = "Enter a valid email";
     }
 
-    if (!form.phone.trim()) nextErrors.phone = "Phone is required";
-
-    const emailExists = users.some(
-      (u) => u.email.toLowerCase() === form.email.trim().toLowerCase()
-    );
+    const emailExists =
+      form.email.trim() &&
+      users.some(
+        (u) => String(u.email || "").toLowerCase() === form.email.trim().toLowerCase()
+      );
 
     if (emailExists) {
       nextErrors.email = "This email already exists";
+    }
+
+    const phoneValue = form.phone.trim();
+    const phoneExists =
+      phoneValue &&
+      users.some((u) => String(u.phone || "").trim() === phoneValue);
+
+    if (phoneExists) {
+      nextErrors.phone = "This phone already exists";
     }
 
     setErrors(nextErrors);
@@ -357,7 +415,7 @@ export default function User() {
       const payload = {
         name: `${form.firstName.trim()} ${form.lastName.trim()}`.trim(),
         email: form.email.trim(),
-        phone: form.phone.trim(),
+        phone: form.phone.trim() || null,
         role_slug: form.role,
         status: form.status,
         program_ids: form.programIds,
@@ -375,14 +433,31 @@ export default function User() {
         "User created successfully. Account setup email has been sent.";
 
       setUsers((prev) => [createdUser, ...prev]);
-      setSuccessMessage(emailMessage);
       closeCreateModal();
       setSuccessMessage(emailMessage);
     } catch (error) {
-      setErrors((prev) => ({
-        ...prev,
-        submit: error.message || "Could not create user.",
-      }));
+      const validation = error?.validation || {};
+      const nextErrors = {};
+
+      if (validation?.name?.[0]) {
+        nextErrors.firstName = validation.name[0];
+      }
+      if (validation?.email?.[0]) {
+        nextErrors.email = validation.email[0];
+      }
+      if (validation?.phone?.[0]) {
+        nextErrors.phone = validation.phone[0];
+      }
+      if (validation?.role_slug?.[0]) {
+        nextErrors.role = validation.role_slug[0];
+      }
+      if (validation?.program_ids?.[0]) {
+        nextErrors.programIds = validation.program_ids[0];
+      }
+
+      nextErrors.submit = error.message || "Could not create user.";
+
+      setErrors(nextErrors);
     } finally {
       setSaving(false);
     }
@@ -533,21 +608,11 @@ export default function User() {
               onChange={(e) => setRoleFilter(e.target.value)}
               className="h-11 rounded-2xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none focus:border-[#6050F0]"
             >
-              <option value="all" className="bg-[#0B0B14]">
-                All Roles
-              </option>
-              <option value="admin" className="bg-[#0B0B14]">
-                Admin
-              </option>
-              <option value="ceo" className="bg-[#0B0B14]">
-                CEO
-              </option>
-              <option value="trainer" className="bg-[#0B0B14]">
-                Trainer
-              </option>
-              <option value="student" className="bg-[#0B0B14]">
-                Student
-              </option>
+              <option value="all" className="bg-[#0B0B14]">All Roles</option>
+              <option value="admin" className="bg-[#0B0B14]">Admin</option>
+              <option value="ceo" className="bg-[#0B0B14]">CEO</option>
+              <option value="trainer" className="bg-[#0B0B14]">Trainer</option>
+              <option value="student" className="bg-[#0B0B14]">Student</option>
             </select>
 
             <select
@@ -555,15 +620,10 @@ export default function User() {
               onChange={(e) => setStatusFilter(e.target.value)}
               className="h-11 rounded-2xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none focus:border-[#6050F0]"
             >
-              <option value="all" className="bg-[#0B0B14]">
-                All Status
-              </option>
-              <option value="active" className="bg-[#0B0B14]">
-                Active
-              </option>
-              <option value="inactive" className="bg-[#0B0B14]">
-                Inactive
-              </option>
+              <option value="all" className="bg-[#0B0B14]">All Status</option>
+              <option value="active" className="bg-[#0B0B14]">Active</option>
+              <option value="inactive" className="bg-[#0B0B14]">Inactive</option>
+              <option value="suspended" className="bg-[#0B0B14]">Suspended</option>
             </select>
           </div>
         </motion.div>
@@ -597,10 +657,7 @@ export default function User() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td
-                      colSpan="7"
-                      className="px-4 py-12 text-center text-sm text-white/55"
-                    >
+                    <td colSpan="7" className="px-4 py-12 text-center text-sm text-white/55">
                       Loading users...
                     </td>
                   </tr>
@@ -616,9 +673,7 @@ export default function User() {
                       <td className="px-4 py-4">
                         <div>
                           <p className="font-bold text-white">{user.fullName}</p>
-                          <p className="mt-1 text-xs text-white/45">
-                            ID: {user.id}
-                          </p>
+                          <p className="mt-1 text-xs text-white/45">ID: {user.id}</p>
                         </div>
                       </td>
 
@@ -636,11 +691,7 @@ export default function User() {
                       </td>
 
                       <td className="px-4 py-4">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${roleBadgeClass(
-                            user.role
-                          )}`}
-                        >
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${roleBadgeClass(user.role)}`}>
                           {normalizeRoleLabel(user.role)}
                         </span>
                       </td>
@@ -663,25 +714,17 @@ export default function User() {
                             ) : null}
                           </div>
                         ) : (
-                          <span className="text-xs text-white/40">
-                            No program
-                          </span>
+                          <span className="text-xs text-white/40">No program</span>
                         )}
                       </td>
 
                       <td className="px-4 py-4">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${statusBadgeClass(
-                            user.status
-                          )}`}
-                        >
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusBadgeClass(user.status)}`}>
                           {user.status}
                         </span>
                       </td>
 
-                      <td className="px-4 py-4 text-white/70">
-                        {user.createdAt}
-                      </td>
+                      <td className="px-4 py-4 text-white/70">{user.createdAt}</td>
 
                       <td className="px-4 py-4">
                         <div className="flex justify-end gap-2">
@@ -710,10 +753,7 @@ export default function User() {
                   ))
                 ) : (
                   <tr>
-                    <td
-                      colSpan="7"
-                      className="px-4 py-12 text-center text-sm text-white/55"
-                    >
+                    <td colSpan="7" className="px-4 py-12 text-center text-sm text-white/55">
                       No users found for the current filter.
                     </td>
                   </tr>
@@ -742,21 +782,16 @@ export default function User() {
           </button>
         </div>
 
-        <form
-          onSubmit={handleCreateUser}
-          className="max-h-[calc(90vh-80px)] overflow-y-auto p-5"
-        >
+        <form onSubmit={handleCreateUser} className="max-h-[calc(90vh-80px)] overflow-y-auto p-5">
           <div className="mb-4 rounded-2xl border border-[#6050F0]/25 bg-[#6050F0]/10 px-4 py-3 text-sm text-[#e5e1ff]">
-            Password setup instructions will be sent to the registered user's email.
+            A secure setup email with password reset link will be sent to this user's email.
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <FieldBlock
               label="First Name"
               value={form.firstName}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, firstName: e.target.value }))
-              }
+              onChange={(e) => updateField("firstName", e.target.value)}
               error={errors.firstName}
               placeholder="John"
             />
@@ -764,9 +799,7 @@ export default function User() {
             <FieldBlock
               label="Last Name"
               value={form.lastName}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, lastName: e.target.value }))
-              }
+              onChange={(e) => updateField("lastName", e.target.value)}
               error={errors.lastName}
               placeholder="Doe"
             />
@@ -775,19 +808,15 @@ export default function User() {
               label="Email"
               type="email"
               value={form.email}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, email: e.target.value }))
-              }
+              onChange={(e) => updateField("email", e.target.value)}
               error={errors.email}
               placeholder="john@example.com"
             />
 
             <FieldBlock
-              label="Phone"
+              label="Phone (optional)"
               value={form.phone}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, phone: e.target.value }))
-              }
+              onChange={(e) => updateField("phone", e.target.value)}
               error={errors.phone}
               placeholder="+2507..."
             />
@@ -795,37 +824,22 @@ export default function User() {
             <SelectBlock
               label="Role"
               value={form.role}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, role: e.target.value }))
-              }
+              onChange={(e) => updateField("role", e.target.value)}
             >
-              <option value="admin" className="bg-[#0B0B14]">
-                Admin
-              </option>
-              <option value="ceo" className="bg-[#0B0B14]">
-                CEO
-              </option>
-              <option value="trainer" className="bg-[#0B0B14]">
-                Trainer
-              </option>
-              <option value="student" className="bg-[#0B0B14]">
-                Student
-              </option>
+              <option value="admin" className="bg-[#0B0B14]">Admin</option>
+              <option value="ceo" className="bg-[#0B0B14]">CEO</option>
+              <option value="trainer" className="bg-[#0B0B14]">Trainer</option>
+              <option value="student" className="bg-[#0B0B14]">Student</option>
             </SelectBlock>
 
             <SelectBlock
               label="Status"
               value={form.status}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, status: e.target.value }))
-              }
+              onChange={(e) => updateField("status", e.target.value)}
             >
-              <option value="active" className="bg-[#0B0B14]">
-                Active
-              </option>
-              <option value="inactive" className="bg-[#0B0B14]">
-                Inactive
-              </option>
+              <option value="active" className="bg-[#0B0B14]">Active</option>
+              <option value="inactive" className="bg-[#0B0B14]">Inactive</option>
+              <option value="suspended" className="bg-[#0B0B14]">Suspended</option>
             </SelectBlock>
 
             <div className="md:col-span-2">
@@ -861,9 +875,7 @@ export default function User() {
                     })}
                   </div>
                 ) : (
-                  <p className="text-sm text-white/50">
-                    No programs available.
-                  </p>
+                  <p className="text-sm text-white/50">No programs available.</p>
                 )}
               </div>
             </div>
