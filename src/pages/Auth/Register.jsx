@@ -2,7 +2,6 @@ import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import {
   clearStoredAuth,
-  extractRole,
   getAuthState,
   getDashboardPathByRole,
   isKnownRole,
@@ -11,55 +10,59 @@ import {
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api";
 
-function getToken(payload) {
-  return (
-    payload?.token ||
-    payload?.access_token ||
-    payload?.data?.token ||
-    payload?.data?.access_token ||
-    payload?.authorisation?.token ||
-    payload?.authorization?.token ||
-    ""
-  );
+function getValidationMessage(payload) {
+  const bag = payload?.data || payload?.errors;
+
+  if (bag && typeof bag === "object") {
+    for (const value of Object.values(bag)) {
+      if (Array.isArray(value) && value.length) return value[0];
+      if (typeof value === "string" && value.trim()) return value;
+    }
+  }
+
+  return "";
 }
 
-function getUser(payload) {
-  return payload?.user || payload?.data?.user || null;
-}
-
-function getMessage(payload) {
+function getMessage(payload, fallback = "Registration failed. Please try again.") {
   return (
+    getValidationMessage(payload) ||
     payload?.message ||
     payload?.error ||
     payload?.data?.message ||
-    "Login failed. Please try again."
+    fallback
   );
 }
 
-export default function Login() {
+async function parseResponse(response) {
+  const text = await response.text();
+
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    return {
+      message: text || "Unable to read server response.",
+    };
+  }
+}
+
+export default function Register() {
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
+    name: "",
     email: "",
+    phone: "",
     password: "",
-    remember: false,
+    password_confirmation: "",
   });
 
   const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   useEffect(() => {
-    const rememberedEmail = localStorage.getItem("remember_email") || "";
-
-    if (rememberedEmail) {
-      setFormData((prev) => ({
-        ...prev,
-        email: rememberedEmail,
-        remember: true,
-      }));
-    }
-
     const { token, role } = getAuthState();
 
     if (token && isKnownRole(role)) {
@@ -73,100 +76,71 @@ export default function Login() {
   }, [navigate]);
 
   const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
+    const { name, value } = e.target;
 
     setFormData((prev) => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : value,
+      [name]: value,
     }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage("");
+    setSuccessMessage("");
 
-    const email = formData.email.trim();
-    const password = formData.password;
+    const payload = {
+      name: formData.name.trim(),
+      email: formData.email.trim(),
+      phone: formData.phone.trim(),
+      password: formData.password,
+    };
 
-    if (!email || !password) {
-      setErrorMessage("Email and password are required.");
+    if (!payload.name || !payload.email || !payload.password) {
+      setErrorMessage("Name, email, and password are required.");
+      return;
+    }
+
+    if (formData.password.length < 8) {
+      setErrorMessage("Password must be at least 8 characters.");
+      return;
+    }
+
+    if (formData.password !== formData.password_confirmation) {
+      setErrorMessage("Password confirmation does not match.");
       return;
     }
 
     try {
       setLoading(true);
 
-      const response = await fetch(`${API_BASE_URL}/login`, {
+      const response = await fetch(`${API_BASE_URL}/register`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-        body: JSON.stringify({
-          email,
-          password,
-        }),
+        body: JSON.stringify(payload),
       });
 
-      const text = await response.text();
-      let result = {};
-
-      try {
-        result = text ? JSON.parse(text) : {};
-      } catch {
-        result = {
-          message: text || "Unable to read server response.",
-        };
-      }
+      const result = await parseResponse(response);
 
       if (!response.ok) {
-        throw new Error(getMessage(result));
+        throw new Error(getMessage(result, "Registration failed. Please try again."));
       }
 
-      const token = getToken(result);
-      const user = getUser(result);
+      setSuccessMessage(
+        result?.message ||
+          "Account created successfully. You can now sign in."
+      );
 
-      const roleFromPayload = extractRole(result);
-      const roleFromUser = extractRole(user);
-      const roleSlug = roleFromPayload || roleFromUser;
+      localStorage.setItem("remember_email", payload.email);
 
-      if (!token) {
-        throw new Error("Login succeeded but token was not returned.");
-      }
-
-      if (!isKnownRole(roleSlug)) {
-        throw new Error(
-          "Login succeeded, but a single valid role could not be resolved."
-        );
-      }
-
-      clearStoredAuth();
-
-      const storage = formData.remember ? localStorage : sessionStorage;
-
-      storage.setItem("token", token);
-      storage.setItem("auth_token", token);
-      storage.setItem("access_token", token);
-      storage.setItem("role", roleSlug);
-
-      if (user) {
-        const serializedUser = JSON.stringify(user);
-        storage.setItem("user", serializedUser);
-        storage.setItem("auth_user", serializedUser);
-      } else {
-        storage.removeItem("user");
-        storage.removeItem("auth_user");
-      }
-
-      if (formData.remember) {
-        localStorage.setItem("remember_email", email);
-      } else {
-        localStorage.removeItem("remember_email");
-      }
-
-      navigate(getDashboardPathByRole(roleSlug), { replace: true });
+      setTimeout(() => {
+        navigate("/login", { replace: true });
+      }, 1200);
     } catch (error) {
-      setErrorMessage(error.message || "Something went wrong during login.");
+      setErrorMessage(error.message || "Something went wrong during registration.");
     } finally {
       setLoading(false);
     }
@@ -221,7 +195,7 @@ export default function Login() {
         <div className="absolute inset-0 overflow-hidden">
           <img
             src="/hero-tech.jpg"
-            alt="AsyncAfrica Login"
+            alt="AsyncAfrica Register"
             className="bg-zoom h-full w-full object-cover object-center opacity-15"
           />
           <div className="absolute inset-0 bg-black/85" />
@@ -247,27 +221,16 @@ export default function Login() {
             <div className="order-1">
               <div className="mx-auto w-full max-w-md rounded-[24px] border border-white/10 bg-white/[0.05] p-4 shadow-[0_0_40px_rgba(96,80,240,0.08)] backdrop-blur-xl sm:rounded-[28px] sm:p-6">
                 <div className="fade-up inline-flex rounded-full border border-[#7A6CF5]/30 bg-[#6050F0]/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#c9c3ff] sm:px-4 sm:py-2 sm:text-xs">
-                  Secure Access
+                  Create Account
                 </div>
 
                 <h1 className="fade-up mt-4 text-2xl font-black leading-tight text-white sm:text-3xl lg:text-4xl">
-                  Welcome Back
+                  Join AsyncAfrica
                 </h1>
 
                 <p className="fade-up mt-3 text-sm leading-6 text-gray-300 sm:text-base">
-                  Sign in to continue to your AsyncAfrica dashboard.
+                  Create your account to start your journey with AsyncAfrica.
                 </p>
-
-                <div className="mt-4 flex flex-wrap gap-2 lg:hidden">
-                  {["Secure", "Fast", "Mobile Friendly"].map((item) => (
-                    <span
-                      key={item}
-                      className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[11px] text-gray-200"
-                    >
-                      {item}
-                    </span>
-                  ))}
-                </div>
 
                 <form onSubmit={handleSubmit} className="fade-up mt-6 space-y-4">
                   {errorMessage && (
@@ -276,31 +239,52 @@ export default function Login() {
                     </div>
                   )}
 
+                  {successMessage && (
+                    <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+                      {successMessage}
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-gray-200">
+                      Full Name
+                    </label>
+                    <input
+                      name="name"
+                      type="text"
+                      value={formData.name}
+                      onChange={handleChange}
+                      placeholder="Your full name"
+                      className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-500 focus:border-[#7A6CF5] focus:bg-black/40 sm:py-3.5"
+                    />
+                  </div>
+
                   <div>
                     <label className="mb-2 block text-sm font-medium text-gray-200">
                       Email Address
                     </label>
-                    <div className="relative">
-                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
-                        <svg
-                          viewBox="0 0 24 24"
-                          fill="currentColor"
-                          className="h-5 w-5"
-                        >
-                          <path d="M4 5h16a2 2 0 0 1 2 2v.4l-10 6.25L2 7.4V7a2 2 0 0 1 2-2Zm18 4.25V17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9.25l9.47 5.92a1 1 0 0 0 1.06 0L22 9.25Z" />
-                        </svg>
-                      </span>
+                    <input
+                      name="email"
+                      type="email"
+                      value={formData.email}
+                      onChange={handleChange}
+                      placeholder="you@example.com"
+                      className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-500 focus:border-[#7A6CF5] focus:bg-black/40 sm:py-3.5"
+                    />
+                  </div>
 
-                      <input
-                        name="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={handleChange}
-                        placeholder="you@example.com"
-                        autoComplete="email"
-                        className="w-full rounded-2xl border border-white/10 bg-black/30 py-3 pl-12 pr-4 text-sm text-white outline-none transition placeholder:text-gray-500 focus:border-[#7A6CF5] focus:bg-black/40 sm:py-3.5"
-                      />
-                    </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-gray-200">
+                      Phone Number
+                    </label>
+                    <input
+                      name="phone"
+                      type="text"
+                      value={formData.phone}
+                      onChange={handleChange}
+                      placeholder="+2507..."
+                      className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-500 focus:border-[#7A6CF5] focus:bg-black/40 sm:py-3.5"
+                    />
                   </div>
 
                   <div>
@@ -308,71 +292,47 @@ export default function Login() {
                       Password
                     </label>
                     <div className="relative">
-                      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
-                        <svg
-                          viewBox="0 0 24 24"
-                          fill="currentColor"
-                          className="h-5 w-5"
-                        >
-                          <path d="M17 8h-1V6a4 4 0 1 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2Zm-7-2a2 2 0 1 1 4 0v2h-4V6Zm2 10a2 2 0 1 1 0-4 2 2 0 0 1 0 4Z" />
-                        </svg>
-                      </span>
-
                       <input
                         name="password"
                         type={showPassword ? "text" : "password"}
                         value={formData.password}
                         onChange={handleChange}
-                        placeholder="Enter your password"
-                        autoComplete="current-password"
-                        className="w-full rounded-2xl border border-white/10 bg-black/30 py-3 pl-12 pr-14 text-sm text-white outline-none transition placeholder:text-gray-500 focus:border-[#7A6CF5] focus:bg-black/40 sm:py-3.5"
+                        placeholder="Minimum 8 characters"
+                        className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 pr-14 text-sm text-white outline-none transition placeholder:text-gray-500 focus:border-[#7A6CF5] focus:bg-black/40 sm:py-3.5"
                       />
 
                       <button
                         type="button"
                         onClick={() => setShowPassword((prev) => !prev)}
                         className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 transition hover:text-white"
-                        aria-label={showPassword ? "Hide password" : "Show password"}
                       >
-                        {showPassword ? (
-                          <svg
-                            viewBox="0 0 24 24"
-                            fill="currentColor"
-                            className="h-5 w-5"
-                          >
-                            <path d="M12 5c5.23 0 9.27 3.11 11 7-1.06 2.39-2.91 4.4-5.3 5.7l1.42 1.42-1.41 1.41-14-14 1.41-1.41 2.15 2.15A12.6 12.6 0 0 1 12 5Zm0 14c-5.23 0-9.27-3.11-11-7a12.76 12.76 0 0 1 4.37-5.16l1.46 1.46A5 5 0 0 0 12 17a4.9 4.9 0 0 0 2.7-.8l1.55 1.55A12.5 12.6 0 0 1 12 19Zm0-4a3 3 0 0 1-3-3c0-.35.06-.69.18-1.01l3.83 3.83c-.32.12-.66.18-1.01.18Zm2.82-1.99-3.83-3.83c.32-.12.66-.18 1.01-.18a3 3 0 0 1 3 3c0 .35-.06.69-.18 1.01Z" />
-                          </svg>
-                        ) : (
-                          <svg
-                            viewBox="0 0 24 24"
-                            fill="currentColor"
-                            className="h-5 w-5"
-                          >
-                            <path d="M12 5c5.23 0 9.27 3.11 11 7-1.73 3.89-5.77 7-11 7S2.73 15.89 1 12c1.73-3.89 5.77-7 11-7Zm0 2C8.32 7 5.39 9.06 3.73 12 5.39 14.94 8.32 17 12 17s6.61-2.06 8.27-5C18.61 9.06 15.68 7 12 7Zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z" />
-                          </svg>
-                        )}
+                        {showPassword ? "Hide" : "Show"}
                       </button>
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
-                    <label className="flex items-center gap-2 text-gray-300">
-                      <input
-                        name="remember"
-                        type="checkbox"
-                        checked={formData.remember}
-                        onChange={handleChange}
-                        className="h-4 w-4 rounded border-white/20 bg-black/30 text-[#6050F0] focus:ring-[#6050F0]"
-                      />
-                      Remember me
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-gray-200">
+                      Confirm Password
                     </label>
+                    <div className="relative">
+                      <input
+                        name="password_confirmation"
+                        type={showPasswordConfirm ? "text" : "password"}
+                        value={formData.password_confirmation}
+                        onChange={handleChange}
+                        placeholder="Confirm your password"
+                        className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 pr-14 text-sm text-white outline-none transition placeholder:text-gray-500 focus:border-[#7A6CF5] focus:bg-black/40 sm:py-3.5"
+                      />
 
-                    <Link
-                      to="/forgot-password"
-                      className="font-medium text-[#c9c3ff] transition hover:text-white"
-                    >
-                      Forgot password?
-                    </Link>
+                      <button
+                        type="button"
+                        onClick={() => setShowPasswordConfirm((prev) => !prev)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 transition hover:text-white"
+                      >
+                        {showPasswordConfirm ? "Hide" : "Show"}
+                      </button>
+                    </div>
                   </div>
 
                   <button
@@ -380,17 +340,17 @@ export default function Login() {
                     disabled={loading}
                     className="glow-pulse w-full rounded-full bg-[#6050F0] px-6 py-3.5 text-sm font-bold text-white transition duration-300 hover:-translate-y-0.5 hover:bg-[#7A6CF5] disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    {loading ? "Signing In..." : "Sign In"}
+                    {loading ? "Creating Account..." : "Create Account"}
                   </button>
                 </form>
 
                 <div className="mt-5 text-center text-sm text-gray-300">
-                  Need help accessing your account?{" "}
+                  Already have an account?{" "}
                   <Link
-                    to="/contact"
+                    to="/login"
                     className="font-semibold text-[#c9c3ff] transition hover:text-white"
                   >
-                    Contact support
+                    Sign in
                   </Link>
                 </div>
 
@@ -416,28 +376,27 @@ export default function Login() {
               <div className="mx-auto w-full max-w-xl">
                 <div className="fade-up rounded-[28px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_0_40px_rgba(96,80,240,0.07)] backdrop-blur-xl sm:p-8">
                   <div className="inline-flex rounded-full border border-[#7A6CF5]/30 bg-[#6050F0]/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#c9c3ff]">
-                    AsyncAfrica Portal
+                    New Member Access
                   </div>
 
                   <h2 className="mt-5 text-3xl font-black leading-tight text-white sm:text-4xl lg:text-5xl">
-                    Manage Your
+                    Start Your
                     <span className="block bg-gradient-to-r from-[#6050F0] via-[#7A6CF5] to-white bg-clip-text text-transparent">
-                      Digital Journey
+                      Learning Journey
                     </span>
                   </h2>
 
                   <p className="mt-4 text-sm leading-7 text-gray-300 sm:text-base">
-                    Access your dashboard to follow projects, training,
-                    services, and opportunities with a modern and secure
-                    experience built for growth.
+                    Create your account to explore opportunities, training,
+                    projects, and services in one secure modern portal.
                   </p>
 
                   <div className="mt-5 flex flex-wrap gap-3">
                     {[
+                      "Easy Registration",
                       "Secure Access",
-                      "Mobile Friendly",
-                      "Project Tracking",
-                      "Training Portal",
+                      "Student Ready",
+                      "Growth Focused",
                     ].map((item) => (
                       <span
                         key={item}

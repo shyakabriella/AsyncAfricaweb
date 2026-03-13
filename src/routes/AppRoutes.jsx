@@ -7,6 +7,9 @@ import CustomerChatWidget from "../components/support/CustomerChatWidget";
 
 import Home from "../pages/Home";
 import Login from "../pages/Auth/Login";
+import Register from "../pages/Auth/Register";
+import ForgotPassword from "../pages/Auth/ForgotPassword";
+import ResetPassword from "../pages/Auth/ResetPassword";
 import Services from "../pages/Services";
 import ServiceDetails from "../pages/ServiceDetails";
 import Training from "../pages/Training/Training";
@@ -86,6 +89,9 @@ export default function AppRoutes() {
 
   const hideChatWidget =
     location.pathname === "/login" ||
+    location.pathname === "/register" ||
+    location.pathname === "/forgot-password" ||
+    location.pathname === "/reset-password" ||
     location.pathname.startsWith("/dashboard");
 
   return (
@@ -106,6 +112,33 @@ export default function AppRoutes() {
           element={
             <PublicOnlyRoute>
               <Login />
+            </PublicOnlyRoute>
+          }
+        />
+
+        <Route
+          path="/register"
+          element={
+            <PublicOnlyRoute>
+              <Register />
+            </PublicOnlyRoute>
+          }
+        />
+
+        <Route
+          path="/forgot-password"
+          element={
+            <PublicOnlyRoute>
+              <ForgotPassword />
+            </PublicOnlyRoute>
+          }
+        />
+
+        <Route
+          path="/reset-password"
+          element={
+            <PublicOnlyRoute>
+              <ResetPassword />
             </PublicOnlyRoute>
           }
         />
