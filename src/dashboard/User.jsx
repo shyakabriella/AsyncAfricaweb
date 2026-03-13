@@ -14,10 +14,23 @@ import {
   Phone,
   BookOpen,
   CheckCircle2,
+  CalendarDays,
+  Wallet,
+  DollarSign,
+  Loader2,
+  RefreshCw,
 } from "lucide-react";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api";
+
+function getTodayDate() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 function getToken() {
   return (
@@ -48,11 +61,19 @@ function getHeaders(isJson = true) {
 }
 
 function extractValidationErrors(result) {
-  if (result?.data && typeof result.data === "object" && !Array.isArray(result.data)) {
+  if (
+    result?.data &&
+    typeof result.data === "object" &&
+    !Array.isArray(result.data)
+  ) {
     return result.data;
   }
 
-  if (result?.errors && typeof result.errors === "object" && !Array.isArray(result.errors)) {
+  if (
+    result?.errors &&
+    typeof result.errors === "object" &&
+    !Array.isArray(result.errors)
+  ) {
     return result.errors;
   }
 
@@ -137,6 +158,14 @@ function statusBadgeClass(status) {
   return "bg-rose-500/15 text-rose-200";
 }
 
+function attendanceStatusClass(status) {
+  if (status === "Present") return "bg-emerald-500/15 text-emerald-200";
+  if (status === "Late") return "bg-amber-500/15 text-amber-200";
+  if (status === "Absent") return "bg-rose-500/15 text-rose-200";
+  if (status === "Excused") return "bg-sky-500/15 text-sky-200";
+  return "bg-white/10 text-white/80";
+}
+
 function normalizePrograms(programs) {
   if (!Array.isArray(programs)) return [];
   return programs.map((program) => ({
@@ -144,6 +173,20 @@ function normalizePrograms(programs) {
     name: program?.name || program?.title || "Untitled Program",
     slug: program?.slug || "",
   }));
+}
+
+function formatMoney(amount, currency = "RWF") {
+  const value = Number(amount || 0);
+
+  try {
+    return new Intl.NumberFormat("en-RW", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+    }).format(value);
+  } catch {
+    return `${currency} ${value.toLocaleString()}`;
+  }
 }
 
 function normalizeUser(item) {
@@ -177,8 +220,27 @@ function normalizeUser(item) {
     createdAt:
       item?.created_at?.slice?.(0, 10) ||
       item?.createdAt ||
-      new Date().toISOString().slice(0, 10),
+      getTodayDate(),
     programs: normalizePrograms(item?.programs || []),
+    dailyRate: Number(item?.daily_rate || 0),
+    walletBalance: Number(item?.wallet?.balance || 0),
+    walletCurrency: item?.wallet?.currency || "RWF",
+    walletStatus: item?.wallet?.status || "",
+  };
+}
+
+function normalizeTrainerAttendance(item) {
+  return {
+    id: item?.id,
+    trainerId: item?.trainer_id || item?.trainer?.id || "",
+    trainerName: item?.trainer?.name || "Unknown Trainer",
+    attendanceDate:
+      item?.attendance_date?.slice?.(0, 10) || item?.attendance_date || "",
+    status: item?.status || "Not Marked",
+    dailyRate: Number(item?.daily_rate || 0),
+    salaryAmount: Number(item?.salary_amount || 0),
+    isPaid: Boolean(item?.is_paid),
+    paidAt: item?.paid_at || null,
   };
 }
 
@@ -236,11 +298,33 @@ export default function User() {
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [openModal, setOpenModal] = useState(false);
+  const [salaryModalOpen, setSalaryModalOpen] = useState(false);
+  const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [salarySaving, setSalarySaving] = useState(false);
+  const [attendanceSaving, setAttendanceSaving] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [pageError, setPageError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+
+  const [reportDate, setReportDate] = useState(getTodayDate());
+  const [attendanceReportLoading, setAttendanceReportLoading] = useState(false);
+  const [attendanceReportError, setAttendanceReportError] = useState("");
+  const [trainerAttendanceRows, setTrainerAttendanceRows] = useState([]);
+  const [trainerAttendanceSummary, setTrainerAttendanceSummary] = useState({
+    total_records: 0,
+    present: 0,
+    absent: 0,
+    late: 0,
+    excused: 0,
+    not_marked: 0,
+    total_salary: 0,
+    total_paid: 0,
+    total_unpaid: 0,
+  });
 
   const [form, setForm] = useState({
     firstName: "",
@@ -250,9 +334,21 @@ export default function User() {
     role: "student",
     status: "active",
     programIds: [],
+    dailyRate: "",
+  });
+
+  const [salaryForm, setSalaryForm] = useState({
+    dailyRate: "",
+  });
+
+  const [attendanceForm, setAttendanceForm] = useState({
+    attendance_date: getTodayDate(),
+    status: "Present",
   });
 
   const [errors, setErrors] = useState({});
+  const [salaryErrors, setSalaryErrors] = useState({});
+  const [attendanceErrors, setAttendanceErrors] = useState({});
 
   useEffect(() => {
     loadInitialData();
@@ -291,6 +387,8 @@ export default function User() {
           name: program?.name || program?.title || "Untitled Program",
         }))
       );
+
+      await loadTrainerAttendanceReport(reportDate);
     } catch (error) {
       setPageError(error.message || "Could not load users.");
     } finally {
@@ -298,12 +396,66 @@ export default function User() {
     }
   }
 
+  async function loadTrainerAttendanceReport(dateValue = reportDate) {
+    try {
+      setAttendanceReportLoading(true);
+      setAttendanceReportError("");
+
+      const result = await apiRequest(
+        `/trainer-attendances?attendance_date=${encodeURIComponent(dateValue)}`
+      );
+
+      const rows = Array.isArray(result?.data)
+        ? result.data
+        : Array.isArray(result?.data?.data)
+        ? result.data.data
+        : [];
+
+      setTrainerAttendanceRows(rows.map(normalizeTrainerAttendance));
+      setTrainerAttendanceSummary(
+        result?.summary || {
+          total_records: 0,
+          present: 0,
+          absent: 0,
+          late: 0,
+          excused: 0,
+          not_marked: 0,
+          total_salary: 0,
+          total_paid: 0,
+          total_unpaid: 0,
+        }
+      );
+    } catch (error) {
+      setAttendanceReportRowsSafe([]);
+      setTrainerAttendanceSummary({
+        total_records: 0,
+        present: 0,
+        absent: 0,
+        late: 0,
+        excused: 0,
+        not_marked: 0,
+        total_salary: 0,
+        total_paid: 0,
+        total_unpaid: 0,
+      });
+      setAttendanceReportError(
+        error.message || "Could not load trainer attendance report."
+      );
+    } finally {
+      setAttendanceReportLoading(false);
+    }
+  }
+
+  function setAttendanceReportRowsSafe(rows) {
+    setTrainerAttendanceRows(Array.isArray(rows) ? rows : []);
+  }
+
   const filteredUsers = useMemo(() => {
     return users.filter((user) => {
       const fullText =
         `${user.fullName} ${user.email} ${user.phone} ${user.programs
           .map((p) => p.name)
-          .join(" ")}`.toLowerCase();
+          .join(" ")} ${user.role}`.toLowerCase();
 
       const matchesSearch = fullText.includes(search.toLowerCase());
       const matchesRole = roleFilter === "all" ? true : user.role === roleFilter;
@@ -315,11 +467,15 @@ export default function User() {
   }, [users, search, roleFilter, statusFilter]);
 
   const stats = useMemo(() => {
+    const trainerUsers = users.filter((u) => u.role === "trainer");
+
     return {
       total: users.length,
       admins: users.filter((u) => u.role === "admin").length,
-      trainers: users.filter((u) => u.role === "trainer").length,
+      trainers: trainerUsers.length,
       students: users.filter((u) => u.role === "student").length,
+      salaryEnabled: trainerUsers.filter((u) => Number(u.dailyRate) > 0).length,
+      walletReady: trainerUsers.filter((u) => u.walletStatus === "active").length,
     };
   }, [users]);
 
@@ -332,8 +488,17 @@ export default function User() {
       role: "student",
       status: "active",
       programIds: [],
+      dailyRate: "",
     });
     setErrors({});
+  }
+
+  function resetAttendanceForm() {
+    setAttendanceForm({
+      attendance_date: getTodayDate(),
+      status: "Present",
+    });
+    setAttendanceErrors({});
   }
 
   function openCreateModal() {
@@ -345,6 +510,44 @@ export default function User() {
   function closeCreateModal() {
     setOpenModal(false);
     resetForm();
+  }
+
+  function openSalaryModal(user) {
+    if (user.role !== "trainer") {
+      alert("Salary setting is available for trainers only.");
+      return;
+    }
+
+    setSelectedUser(user);
+    setSalaryForm({
+      dailyRate: String(user.dailyRate || ""),
+    });
+    setSalaryErrors({});
+    setSalaryModalOpen(true);
+  }
+
+  function closeSalaryModal() {
+    setSalaryModalOpen(false);
+    setSelectedUser(null);
+    setSalaryForm({ dailyRate: "" });
+    setSalaryErrors({});
+  }
+
+  function openAttendanceModal(user) {
+    if (user.role !== "trainer") {
+      alert("Attendance tracking is available for trainers only.");
+      return;
+    }
+
+    setSelectedUser(user);
+    resetAttendanceForm();
+    setAttendanceModalOpen(true);
+  }
+
+  function closeAttendanceModal() {
+    setAttendanceModalOpen(false);
+    setSelectedUser(null);
+    resetAttendanceForm();
   }
 
   function updateField(key, value) {
@@ -382,7 +585,8 @@ export default function User() {
     const emailExists =
       form.email.trim() &&
       users.some(
-        (u) => String(u.email || "").toLowerCase() === form.email.trim().toLowerCase()
+        (u) =>
+          String(u.email || "").toLowerCase() === form.email.trim().toLowerCase()
       );
 
     if (emailExists) {
@@ -391,11 +595,18 @@ export default function User() {
 
     const phoneValue = form.phone.trim();
     const phoneExists =
-      phoneValue &&
-      users.some((u) => String(u.phone || "").trim() === phoneValue);
+      phoneValue && users.some((u) => String(u.phone || "").trim() === phoneValue);
 
     if (phoneExists) {
       nextErrors.phone = "This phone already exists";
+    }
+
+    if (
+      form.role === "trainer" &&
+      form.dailyRate !== "" &&
+      Number(form.dailyRate) < 0
+    ) {
+      nextErrors.dailyRate = "Daily rate must be 0 or more";
     }
 
     setErrors(nextErrors);
@@ -419,6 +630,7 @@ export default function User() {
         role_slug: form.role,
         status: form.status,
         program_ids: form.programIds,
+        daily_rate: form.role === "trainer" ? Number(form.dailyRate || 0) : 0,
       };
 
       const result = await apiRequest("/users", {
@@ -435,6 +647,7 @@ export default function User() {
       setUsers((prev) => [createdUser, ...prev]);
       closeCreateModal();
       setSuccessMessage(emailMessage);
+      await loadInitialData();
     } catch (error) {
       const validation = error?.validation || {};
       const nextErrors = {};
@@ -454,12 +667,109 @@ export default function User() {
       if (validation?.program_ids?.[0]) {
         nextErrors.programIds = validation.program_ids[0];
       }
+      if (validation?.daily_rate?.[0]) {
+        nextErrors.dailyRate = validation.daily_rate[0];
+      }
 
       nextErrors.submit = error.message || "Could not create user.";
-
       setErrors(nextErrors);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSaveSalary(e) {
+    e.preventDefault();
+
+    if (!selectedUser) return;
+
+    const nextErrors = {};
+
+    if (salaryForm.dailyRate === "") {
+      nextErrors.dailyRate = "Daily rate is required";
+    } else if (Number(salaryForm.dailyRate) < 0) {
+      nextErrors.dailyRate = "Daily rate must be 0 or more";
+    }
+
+    if (Object.keys(nextErrors).length) {
+      setSalaryErrors(nextErrors);
+      return;
+    }
+
+    try {
+      setSalarySaving(true);
+      setSalaryErrors({});
+
+      await apiRequest(`/users/${selectedUser.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          daily_rate: Number(salaryForm.dailyRate),
+        }),
+      });
+
+      await loadInitialData();
+      closeSalaryModal();
+      setSuccessMessage("Trainer daily salary updated successfully.");
+    } catch (error) {
+      const validation = error?.validation || {};
+      setSalaryErrors({
+        dailyRate: validation?.daily_rate?.[0] || "",
+        submit: error.message || "Could not update salary.",
+      });
+    } finally {
+      setSalarySaving(false);
+    }
+  }
+
+  async function handleTrackAttendance(e) {
+    e.preventDefault();
+
+    if (!selectedUser) return;
+
+    const nextErrors = {};
+
+    if (!attendanceForm.attendance_date) {
+      nextErrors.attendance_date = "Attendance date is required";
+    }
+
+    if (!attendanceForm.status) {
+      nextErrors.status = "Status is required";
+    }
+
+    if (Object.keys(nextErrors).length) {
+      setAttendanceErrors(nextErrors);
+      return;
+    }
+
+    try {
+      setAttendanceSaving(true);
+      setAttendanceErrors({});
+
+      await apiRequest("/trainer-attendances", {
+        method: "POST",
+        body: JSON.stringify({
+          trainer_id: selectedUser.id,
+          attendance_date: attendanceForm.attendance_date,
+          status: attendanceForm.status,
+          daily_rate: Number(selectedUser.dailyRate || 0),
+        }),
+      });
+
+      setReportDate(attendanceForm.attendance_date);
+      await loadTrainerAttendanceReport(attendanceForm.attendance_date);
+      closeAttendanceModal();
+      setSuccessMessage(
+        `Attendance saved successfully for ${selectedUser.fullName}.`
+      );
+    } catch (error) {
+      const validation = error?.validation || {};
+      setAttendanceErrors({
+        attendance_date: validation?.attendance_date?.[0] || "",
+        status: validation?.status?.[0] || "",
+        submit: error.message || "Could not save attendance.",
+      });
+    } finally {
+      setAttendanceSaving(false);
     }
   }
 
@@ -471,18 +781,21 @@ export default function User() {
         method: "POST",
       });
 
+      const rawUser = result?.data?.user || null;
       const updatedStatus =
         result?.data?.status || result?.status || result?.data?.user?.status;
 
       setUsers((prev) =>
         prev.map((user) =>
           user.id === id
-            ? {
-                ...user,
-                status:
-                  updatedStatus ||
-                  (user.status === "active" ? "inactive" : "active"),
-              }
+            ? rawUser
+              ? normalizeUser(rawUser)
+              : {
+                  ...user,
+                  status:
+                    updatedStatus ||
+                    (user.status === "active" ? "inactive" : "active"),
+                }
             : user
         )
       );
@@ -528,7 +841,8 @@ export default function User() {
                 User Management
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-white/70">
-                Create, manage, activate, and assign users to programs from one clean dashboard.
+                Create, manage, activate, assign programs, set trainer salary,
+                and track trainer attendance from one clean dashboard.
               </p>
             </div>
 
@@ -575,13 +889,13 @@ export default function User() {
           <StatCard
             title="Trainers"
             value={stats.trainers}
-            note="Training staff"
+            note={`${stats.salaryEnabled} salary-enabled`}
             icon={<Briefcase className="h-5 w-5" />}
           />
           <StatCard
             title="Students"
             value={stats.students}
-            note="Learners and applicants"
+            note={`${stats.walletReady} trainer wallets ready`}
             icon={<GraduationCap className="h-5 w-5" />}
           />
         </div>
@@ -608,11 +922,21 @@ export default function User() {
               onChange={(e) => setRoleFilter(e.target.value)}
               className="h-11 rounded-2xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none focus:border-[#6050F0]"
             >
-              <option value="all" className="bg-[#0B0B14]">All Roles</option>
-              <option value="admin" className="bg-[#0B0B14]">Admin</option>
-              <option value="ceo" className="bg-[#0B0B14]">CEO</option>
-              <option value="trainer" className="bg-[#0B0B14]">Trainer</option>
-              <option value="student" className="bg-[#0B0B14]">Student</option>
+              <option value="all" className="bg-[#0B0B14]">
+                All Roles
+              </option>
+              <option value="admin" className="bg-[#0B0B14]">
+                Admin
+              </option>
+              <option value="ceo" className="bg-[#0B0B14]">
+                CEO
+              </option>
+              <option value="trainer" className="bg-[#0B0B14]">
+                Trainer
+              </option>
+              <option value="student" className="bg-[#0B0B14]">
+                Student
+              </option>
             </select>
 
             <select
@@ -620,10 +944,18 @@ export default function User() {
               onChange={(e) => setStatusFilter(e.target.value)}
               className="h-11 rounded-2xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none focus:border-[#6050F0]"
             >
-              <option value="all" className="bg-[#0B0B14]">All Status</option>
-              <option value="active" className="bg-[#0B0B14]">Active</option>
-              <option value="inactive" className="bg-[#0B0B14]">Inactive</option>
-              <option value="suspended" className="bg-[#0B0B14]">Suspended</option>
+              <option value="all" className="bg-[#0B0B14]">
+                All Status
+              </option>
+              <option value="active" className="bg-[#0B0B14]">
+                Active
+              </option>
+              <option value="inactive" className="bg-[#0B0B14]">
+                Inactive
+              </option>
+              <option value="suspended" className="bg-[#0B0B14]">
+                Suspended
+              </option>
             </select>
           </div>
         </motion.div>
@@ -647,6 +979,8 @@ export default function User() {
                   <th className="px-4 py-4 font-semibold">User</th>
                   <th className="px-4 py-4 font-semibold">Contact</th>
                   <th className="px-4 py-4 font-semibold">Role</th>
+                  <th className="px-4 py-4 font-semibold">Daily Salary</th>
+                  <th className="px-4 py-4 font-semibold">Wallet</th>
                   <th className="px-4 py-4 font-semibold">Programs</th>
                   <th className="px-4 py-4 font-semibold">Status</th>
                   <th className="px-4 py-4 font-semibold">Created</th>
@@ -657,7 +991,10 @@ export default function User() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="7" className="px-4 py-12 text-center text-sm text-white/55">
+                    <td
+                      colSpan="9"
+                      className="px-4 py-12 text-center text-sm text-white/55"
+                    >
                       Loading users...
                     </td>
                   </tr>
@@ -691,9 +1028,44 @@ export default function User() {
                       </td>
 
                       <td className="px-4 py-4">
-                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${roleBadgeClass(user.role)}`}>
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-semibold ${roleBadgeClass(
+                            user.role
+                          )}`}
+                        >
                           {normalizeRoleLabel(user.role)}
                         </span>
+                      </td>
+
+                      <td className="px-4 py-4">
+                        {user.role === "trainer" ? (
+                          <div>
+                            <p className="font-semibold text-white">
+                              {formatMoney(user.dailyRate, user.walletCurrency)}
+                            </p>
+                            <p className="mt-1 text-xs text-white/45">per day</p>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-white/40">Not applicable</span>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-4">
+                        {user.role === "trainer" ? (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 text-white/80">
+                              <Wallet className="h-3.5 w-3.5" />
+                              <span>
+                                {formatMoney(user.walletBalance, user.walletCurrency)}
+                              </span>
+                            </div>
+                            <p className="text-xs text-white/45">
+                              {user.walletStatus || "No wallet"}
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-white/40">Not applicable</span>
+                        )}
                       </td>
 
                       <td className="px-4 py-4">
@@ -719,7 +1091,11 @@ export default function User() {
                       </td>
 
                       <td className="px-4 py-4">
-                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusBadgeClass(user.status)}`}>
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-semibold ${statusBadgeClass(
+                            user.status
+                          )}`}
+                        >
                           {user.status}
                         </span>
                       </td>
@@ -728,6 +1104,28 @@ export default function User() {
 
                       <td className="px-4 py-4">
                         <div className="flex justify-end gap-2">
+                          {user.role === "trainer" ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => openSalaryModal(user)}
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/[0.05] text-white transition hover:bg-emerald-600"
+                                title="Set daily salary"
+                              >
+                                <DollarSign className="h-4 w-4" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => openAttendanceModal(user)}
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/[0.05] text-white transition hover:bg-sky-600"
+                                title="Track attendance"
+                              >
+                                <CalendarDays className="h-4 w-4" />
+                              </button>
+                            </>
+                          ) : null}
+
                           <button
                             type="button"
                             onClick={() => toggleStatus(user.id)}
@@ -753,8 +1151,168 @@ export default function User() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="7" className="px-4 py-12 text-center text-sm text-white/55">
+                    <td
+                      colSpan="9"
+                      className="px-4 py-12 text-center text-sm text-white/55"
+                    >
                       No users found for the current filter.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-[28px] border border-white/10 bg-[#0d1020] p-5"
+        >
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#b7afff]">
+                Trainer Daily Attendance Report
+              </p>
+              <h2 className="mt-1 text-2xl font-black text-white">
+                Daily Trainer Attendance
+              </h2>
+              <p className="mt-2 text-sm text-white/60">
+                View trainer attendance and salary summary by date.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-end gap-3">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-white/80">
+                  Report Date
+                </label>
+                <input
+                  type="date"
+                  value={reportDate}
+                  onChange={(e) => setReportDate(e.target.value)}
+                  className="h-11 rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-sm text-white outline-none transition focus:border-[#6050F0]"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => loadTrainerAttendanceReport(reportDate)}
+                disabled={attendanceReportLoading}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-[#6050F0] px-5 text-sm font-bold text-white transition hover:bg-[#7567ff] disabled:opacity-60"
+              >
+                {attendanceReportLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                Refresh Report
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <StatCard
+              title="Total Records"
+              value={trainerAttendanceSummary.total_records || 0}
+              note="Trainer attendance rows"
+              icon={<Users className="h-5 w-5" />}
+            />
+            <StatCard
+              title="Present"
+              value={trainerAttendanceSummary.present || 0}
+              note="Marked present"
+              icon={<CheckCircle2 className="h-5 w-5" />}
+            />
+            <StatCard
+              title="Total Salary"
+              value={formatMoney(trainerAttendanceSummary.total_salary || 0)}
+              note="Generated salary"
+              icon={<DollarSign className="h-5 w-5" />}
+            />
+            <StatCard
+              title="Unpaid Salary"
+              value={formatMoney(trainerAttendanceSummary.total_unpaid || 0)}
+              note="Still unpaid"
+              icon={<Wallet className="h-5 w-5" />}
+            />
+          </div>
+
+          {attendanceReportError ? (
+            <div className="mt-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+              {attendanceReportError}
+            </div>
+          ) : null}
+
+          <div className="mt-5 overflow-x-auto">
+            <table className="min-w-full text-left">
+              <thead className="border-b border-white/10 bg-white/[0.03]">
+                <tr className="text-xs uppercase tracking-[0.18em] text-white/45">
+                  <th className="px-4 py-4 font-semibold">Trainer</th>
+                  <th className="px-4 py-4 font-semibold">Date</th>
+                  <th className="px-4 py-4 font-semibold">Status</th>
+                  <th className="px-4 py-4 font-semibold">Daily Rate</th>
+                  <th className="px-4 py-4 font-semibold">Salary</th>
+                  <th className="px-4 py-4 font-semibold">Payment</th>
+                </tr>
+              </thead>
+              <tbody>
+                {attendanceReportLoading ? (
+                  <tr>
+                    <td
+                      colSpan="6"
+                      className="px-4 py-12 text-center text-sm text-white/55"
+                    >
+                      Loading trainer attendance report...
+                    </td>
+                  </tr>
+                ) : trainerAttendanceRows.length ? (
+                  trainerAttendanceRows.map((row) => (
+                    <tr
+                      key={row.id}
+                      className="border-b border-white/6 text-sm last:border-b-0 hover:bg-white/[0.03]"
+                    >
+                      <td className="px-4 py-4 font-semibold text-white">
+                        {row.trainerName}
+                      </td>
+                      <td className="px-4 py-4 text-white/75">
+                        {row.attendanceDate}
+                      </td>
+                      <td className="px-4 py-4">
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-semibold ${attendanceStatusClass(
+                            row.status
+                          )}`}
+                        >
+                          {row.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-white/75">
+                        {formatMoney(row.dailyRate)}
+                      </td>
+                      <td className="px-4 py-4 text-white/75">
+                        {formatMoney(row.salaryAmount)}
+                      </td>
+                      <td className="px-4 py-4">
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                            row.isPaid
+                              ? "bg-emerald-500/15 text-emerald-200"
+                              : "bg-amber-500/15 text-amber-200"
+                          }`}
+                        >
+                          {row.isPaid ? "Paid" : "Unpaid"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td
+                      colSpan="6"
+                      className="px-4 py-12 text-center text-sm text-white/55"
+                    >
+                      No trainer attendance records found for this date.
                     </td>
                   </tr>
                 )}
@@ -782,9 +1340,13 @@ export default function User() {
           </button>
         </div>
 
-        <form onSubmit={handleCreateUser} className="max-h-[calc(90vh-80px)] overflow-y-auto p-5">
+        <form
+          onSubmit={handleCreateUser}
+          className="max-h-[calc(90vh-80px)] overflow-y-auto p-5"
+        >
           <div className="mb-4 rounded-2xl border border-[#6050F0]/25 bg-[#6050F0]/10 px-4 py-3 text-sm text-[#e5e1ff]">
-            A secure setup email with password reset link will be sent to this user's email.
+            A secure setup email with password reset link will be sent to this
+            user&apos;s email.
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -825,11 +1387,20 @@ export default function User() {
               label="Role"
               value={form.role}
               onChange={(e) => updateField("role", e.target.value)}
+              error={errors.role}
             >
-              <option value="admin" className="bg-[#0B0B14]">Admin</option>
-              <option value="ceo" className="bg-[#0B0B14]">CEO</option>
-              <option value="trainer" className="bg-[#0B0B14]">Trainer</option>
-              <option value="student" className="bg-[#0B0B14]">Student</option>
+              <option value="admin" className="bg-[#0B0B14]">
+                Admin
+              </option>
+              <option value="ceo" className="bg-[#0B0B14]">
+                CEO
+              </option>
+              <option value="trainer" className="bg-[#0B0B14]">
+                Trainer
+              </option>
+              <option value="student" className="bg-[#0B0B14]">
+                Student
+              </option>
             </SelectBlock>
 
             <SelectBlock
@@ -837,10 +1408,30 @@ export default function User() {
               value={form.status}
               onChange={(e) => updateField("status", e.target.value)}
             >
-              <option value="active" className="bg-[#0B0B14]">Active</option>
-              <option value="inactive" className="bg-[#0B0B14]">Inactive</option>
-              <option value="suspended" className="bg-[#0B0B14]">Suspended</option>
+              <option value="active" className="bg-[#0B0B14]">
+                Active
+              </option>
+              <option value="inactive" className="bg-[#0B0B14]">
+                Inactive
+              </option>
+              <option value="suspended" className="bg-[#0B0B14]">
+                Suspended
+              </option>
             </SelectBlock>
+
+            {form.role === "trainer" ? (
+              <FieldBlock
+                label="Daily Salary Amount"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.dailyRate}
+                onChange={(e) => updateField("dailyRate", e.target.value)}
+                error={errors.dailyRate}
+                placeholder="5000"
+                className="md:col-span-2"
+              />
+            ) : null}
 
             <div className="md:col-span-2">
               <label className="mb-2 flex items-center gap-2 text-sm font-medium text-white/80">
@@ -878,6 +1469,9 @@ export default function User() {
                   <p className="text-sm text-white/50">No programs available.</p>
                 )}
               </div>
+              {errors.programIds ? (
+                <p className="mt-1 text-xs text-rose-200">{errors.programIds}</p>
+              ) : null}
             </div>
           </div>
 
@@ -899,9 +1493,180 @@ export default function User() {
             <button
               type="submit"
               disabled={saving}
-              className="rounded-2xl bg-[#6050F0] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#7567ff] disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-2xl bg-[#6050F0] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#7567ff] disabled:opacity-60"
             >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {saving ? "Creating..." : "Create User"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={salaryModalOpen}>
+        <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.22em] text-[#b7afff]">
+              Trainer Salary Setting
+            </p>
+            <h2 className="mt-1 text-xl font-black text-white">
+              {selectedUser?.fullName || "Trainer"}
+            </h2>
+          </div>
+
+          <button
+            type="button"
+            onClick={closeSalaryModal}
+            className="grid h-10 w-10 place-items-center rounded-xl bg-white/[0.05] text-white transition hover:bg-white/[0.1]"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSaveSalary} className="p-5">
+          <div className="mb-4 rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+            Set the trainer daily amount. Salary from trainer attendance will use
+            this rate.
+          </div>
+
+          <FieldBlock
+            label="Daily Salary Amount"
+            type="number"
+            min="0"
+            step="0.01"
+            value={salaryForm.dailyRate}
+            onChange={(e) => {
+              setSalaryForm({ dailyRate: e.target.value });
+              setSalaryErrors((prev) => ({ ...prev, dailyRate: "", submit: "" }));
+            }}
+            error={salaryErrors.dailyRate}
+            placeholder="5000"
+          />
+
+          {salaryErrors.submit ? (
+            <div className="mt-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+              {salaryErrors.submit}
+            </div>
+          ) : null}
+
+          <div className="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={closeSalaryModal}
+              className="rounded-2xl bg-white/[0.06] px-5 py-3 text-sm font-bold text-white transition hover:bg-white/[0.1]"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="submit"
+              disabled={salarySaving}
+              className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-emerald-500 disabled:opacity-60"
+            >
+              {salarySaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {salarySaving ? "Saving..." : "Save Salary"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={attendanceModalOpen}>
+        <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.22em] text-[#b7afff]">
+              Trainer Attendance
+            </p>
+            <h2 className="mt-1 text-xl font-black text-white">
+              {selectedUser?.fullName || "Trainer"}
+            </h2>
+          </div>
+
+          <button
+            type="button"
+            onClick={closeAttendanceModal}
+            className="grid h-10 w-10 place-items-center rounded-xl bg-white/[0.05] text-white transition hover:bg-white/[0.1]"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <form
+          onSubmit={handleTrackAttendance}
+          className="max-h-[calc(90vh-80px)] overflow-y-auto p-5"
+        >
+          <div className="mb-4 rounded-2xl border border-sky-500/25 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">
+            Daily rate for this attendance:{" "}
+            <span className="font-bold">
+              {formatMoney(selectedUser?.dailyRate || 0, selectedUser?.walletCurrency)}
+            </span>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <FieldBlock
+              label="Attendance Date"
+              type="date"
+              value={attendanceForm.attendance_date}
+              onChange={(e) =>
+                setAttendanceForm((prev) => ({
+                  ...prev,
+                  attendance_date: e.target.value,
+                }))
+              }
+              error={attendanceErrors.attendance_date}
+            />
+
+            <SelectBlock
+              label="Status"
+              value={attendanceForm.status}
+              onChange={(e) =>
+                setAttendanceForm((prev) => ({
+                  ...prev,
+                  status: e.target.value,
+                }))
+              }
+              error={attendanceErrors.status}
+            >
+              <option value="Present" className="bg-[#0B0B14]">
+                Present
+              </option>
+              <option value="Late" className="bg-[#0B0B14]">
+                Late
+              </option>
+              <option value="Absent" className="bg-[#0B0B14]">
+                Absent
+              </option>
+              <option value="Excused" className="bg-[#0B0B14]">
+                Excused
+              </option>
+              <option value="Not Marked" className="bg-[#0B0B14]">
+                Not Marked
+              </option>
+            </SelectBlock>
+          </div>
+
+          {attendanceErrors.submit ? (
+            <div className="mt-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+              {attendanceErrors.submit}
+            </div>
+          ) : null}
+
+          <div className="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={closeAttendanceModal}
+              className="rounded-2xl bg-white/[0.06] px-5 py-3 text-sm font-bold text-white transition hover:bg-white/[0.1]"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="submit"
+              disabled={attendanceSaving}
+              className="inline-flex items-center gap-2 rounded-2xl bg-sky-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-sky-500 disabled:opacity-60"
+            >
+              {attendanceSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : null}
+              {attendanceSaving ? "Saving..." : "Save Attendance"}
             </button>
           </div>
         </form>
@@ -927,7 +1692,7 @@ function FieldBlock({ label, error, className = "", ...props }) {
   );
 }
 
-function SelectBlock({ label, children, className = "", ...props }) {
+function SelectBlock({ label, children, className = "", error, ...props }) {
   return (
     <div className={className}>
       <label className="mb-2 block text-sm font-medium text-white/80">
@@ -935,10 +1700,13 @@ function SelectBlock({ label, children, className = "", ...props }) {
       </label>
       <select
         {...props}
-        className="h-11 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-sm text-white outline-none transition focus:border-[#6050F0]"
+        className={`h-11 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-sm text-white outline-none transition focus:border-[#6050F0] ${
+          error ? "border-rose-400/70" : ""
+        }`}
       >
         {children}
       </select>
+      {error ? <p className="mt-1 text-xs text-rose-200">{error}</p> : null}
     </div>
   );
 }

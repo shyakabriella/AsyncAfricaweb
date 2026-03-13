@@ -3,8 +3,6 @@ import { useEffect, useMemo, useState } from "react";
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api";
 
-const PRESENT_STATUSES = ["present", "attended", "completed", "served"];
-
 function parseStoredUser(value) {
   try {
     return JSON.parse(value || "{}");
@@ -36,19 +34,33 @@ function getToken() {
   );
 }
 
-function toArray(value) {
-  if (Array.isArray(value)) return value;
-  if (Array.isArray(value?.data)) return value.data;
-  if (Array.isArray(value?.attendance)) return value.attendance;
-  if (Array.isArray(value?.records)) return value.records;
-  if (Array.isArray(value?.wallet)) return value.wallet;
-  return [];
+function getHeaders() {
+  const token = getToken();
+
+  return {
+    Accept: "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
 }
 
-function formatCurrency(amount) {
+async function apiRequest(endpoint) {
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    headers: getHeaders(),
+  });
+
+  const result = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(result?.message || "Request failed.");
+  }
+
+  return result;
+}
+
+function formatCurrency(amount, currency = "RWF") {
   return new Intl.NumberFormat("en-RW", {
     style: "currency",
-    currency: "RWF",
+    currency,
     maximumFractionDigits: 0,
   }).format(Number(amount || 0));
 }
@@ -66,242 +78,185 @@ function formatDate(dateValue) {
   });
 }
 
-function isServedStatus(status) {
-  return PRESENT_STATUSES.includes(String(status || "").toLowerCase());
+function statusBadgeClass(status) {
+  const value = String(status || "").toLowerCase();
+
+  if (value === "present") return "bg-emerald-500/15 text-emerald-300";
+  if (value === "late") return "bg-amber-500/15 text-amber-300";
+  if (value === "absent") return "bg-rose-500/15 text-rose-300";
+  if (value === "excused") return "bg-sky-500/15 text-sky-300";
+  return "bg-white/10 text-white/75";
 }
 
-function normalizeAttendanceRow(row, index, defaultRate = 5000) {
-  const status = String(
-    row?.status ||
-      row?.attendance_status ||
-      row?.state ||
-      row?.attendance?.status ||
-      "present"
-  ).toLowerCase();
-
-  const date =
-    row?.attendance_date ||
-    row?.date ||
-    row?.served_date ||
-    row?.work_date ||
-    row?.created_at ||
-    row?.updated_at ||
-    "";
-
-  const dailyRate = Number(
-    row?.daily_rate ??
-      row?.amount_per_day ??
-      row?.rate ??
-      row?.program?.daily_rate ??
-      row?.program_rate ??
-      defaultRate
-  );
-
-  const program =
-    row?.program?.name ||
-    row?.program_name ||
-    row?.training_name ||
-    row?.title ||
-    "Training Service";
-
-  const shift =
-    row?.shift_name || row?.shift || row?.session || row?.period || "Day Shift";
-
-  const earned = isServedStatus(status) ? dailyRate : 0;
-
+function normalizeCurrentUser(item) {
   return {
-    id: row?.id || index + 1,
-    date,
-    program,
-    shift,
-    status,
-    dailyRate,
-    earned,
+    id: item?.id || "",
+    name: item?.name || "Trainer",
+    email: item?.email || "",
+    phone: item?.phone || "",
+    dailyRate: Number(item?.daily_rate || 0),
+    walletBalance: Number(item?.wallet?.balance || 0),
+    walletCurrency: item?.wallet?.currency || "RWF",
+    walletStatus: item?.wallet?.status || "",
+    role:
+      item?.role?.slug ||
+      item?.roles?.[0]?.slug ||
+      item?.role ||
+      "",
   };
 }
 
-async function tryMany(endpoints, options) {
-  for (const endpoint of endpoints) {
+function normalizeAttendanceRow(row, index, fallbackRate = 0, currency = "RWF") {
+  return {
+    id: row?.id || index + 1,
+    date: row?.attendance_date || "",
+    trainerId: row?.trainer_id || row?.trainer?.id || "",
+    trainerName: row?.trainer?.name || "",
+    status: row?.status || "Not Marked",
+    dailyRate: Number(row?.daily_rate ?? fallbackRate ?? 0),
+    earned: Number(row?.salary_amount || 0),
+    isPaid: Boolean(row?.is_paid),
+    paidAt: row?.paid_at || null,
+    currency,
+  };
+}
+
+export default function Wallet() {
+  const storedUser = getStoredUser();
+
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [pageError, setPageError] = useState("");
+  const [currentUser, setCurrentUser] = useState({
+    id: storedUser?.id || "",
+    name: storedUser?.name || "Trainer",
+    email: storedUser?.email || "",
+    phone: storedUser?.phone || "",
+    dailyRate: Number(storedUser?.daily_rate || 0),
+    walletBalance: Number(storedUser?.wallet?.balance || 0),
+    walletCurrency: storedUser?.wallet?.currency || "RWF",
+    walletStatus: storedUser?.wallet?.status || "",
+    role:
+      storedUser?.role?.slug ||
+      storedUser?.roles?.[0]?.slug ||
+      storedUser?.role ||
+      "",
+  });
+
+  const [rows, setRows] = useState([]);
+  const [reportSummary, setReportSummary] = useState({
+    total_records: 0,
+    present: 0,
+    absent: 0,
+    late: 0,
+    excused: 0,
+    not_marked: 0,
+    total_salary: 0,
+    total_paid: 0,
+    total_unpaid: 0,
+  });
+
+  async function loadWallet(isRefresh = false) {
     try {
-      const res = await fetch(`${API_BASE_URL}${endpoint}`, options);
-      if (!res.ok) continue;
-      const data = await res.json();
-      return data;
-    } catch {
-      // ignore and try next
+      setPageError("");
+
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
+      const meResponse = await apiRequest("/me");
+      const meData = normalizeCurrentUser(meResponse?.data || {});
+      setCurrentUser(meData);
+
+      if (!meData?.id) {
+        throw new Error("Authenticated user not found.");
+      }
+
+      const attendanceResponse = await apiRequest(
+        `/trainer-attendances?trainer_id=${encodeURIComponent(meData.id)}`
+      );
+
+      const rawRows = Array.isArray(attendanceResponse?.data)
+        ? attendanceResponse.data
+        : Array.isArray(attendanceResponse?.data?.data)
+        ? attendanceResponse.data.data
+        : [];
+
+      const normalizedRows = rawRows.map((item, index) =>
+        normalizeAttendanceRow(
+          item,
+          index,
+          meData.dailyRate,
+          meData.walletCurrency || "RWF"
+        )
+      );
+
+      setRows(normalizedRows);
+      setReportSummary(
+        attendanceResponse?.summary || {
+          total_records: normalizedRows.length,
+          present: normalizedRows.filter(
+            (item) => String(item.status).toLowerCase() === "present"
+          ).length,
+          absent: normalizedRows.filter(
+            (item) => String(item.status).toLowerCase() === "absent"
+          ).length,
+          late: normalizedRows.filter(
+            (item) => String(item.status).toLowerCase() === "late"
+          ).length,
+          excused: normalizedRows.filter(
+            (item) => String(item.status).toLowerCase() === "excused"
+          ).length,
+          not_marked: normalizedRows.filter(
+            (item) => String(item.status).toLowerCase() === "not marked"
+          ).length,
+          total_salary: normalizedRows.reduce(
+            (sum, item) => sum + Number(item.earned || 0),
+            0
+          ),
+          total_paid: normalizedRows
+            .filter((item) => item.isPaid)
+            .reduce((sum, item) => sum + Number(item.earned || 0), 0),
+          total_unpaid: normalizedRows
+            .filter((item) => !item.isPaid)
+            .reduce((sum, item) => sum + Number(item.earned || 0), 0),
+        }
+      );
+    } catch (error) {
+      setPageError(error.message || "Could not load wallet data.");
+      setRows([]);
+      setReportSummary({
+        total_records: 0,
+        present: 0,
+        absent: 0,
+        late: 0,
+        excused: 0,
+        not_marked: 0,
+        total_salary: 0,
+        total_paid: 0,
+        total_unpaid: 0,
+      });
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
   }
 
-  return null;
-}
-
-const fallbackRows = [
-  {
-    id: 1,
-    date: "2026-03-01",
-    program: "Web Development",
-    shift: "Morning Shift",
-    status: "present",
-    dailyRate: 5000,
-    earned: 5000,
-  },
-  {
-    id: 2,
-    date: "2026-03-03",
-    program: "Web Development",
-    shift: "Morning Shift",
-    status: "present",
-    dailyRate: 5000,
-    earned: 5000,
-  },
-  {
-    id: 3,
-    date: "2026-03-05",
-    program: "UI/UX Training",
-    shift: "Afternoon Shift",
-    status: "present",
-    dailyRate: 6000,
-    earned: 6000,
-  },
-  {
-    id: 4,
-    date: "2026-03-06",
-    program: "UI/UX Training",
-    shift: "Afternoon Shift",
-    status: "absent",
-    dailyRate: 6000,
-    earned: 0,
-  },
-  {
-    id: 5,
-    date: "2026-03-08",
-    program: "Software Testing",
-    shift: "Day Shift",
-    status: "present",
-    dailyRate: 5500,
-    earned: 5500,
-  },
-  {
-    id: 6,
-    date: "2026-03-10",
-    program: "Software Testing",
-    shift: "Day Shift",
-    status: "present",
-    dailyRate: 5500,
-    earned: 5500,
-  },
-];
-
-export default function Wallet() {
-  const user = getStoredUser();
-
-  const [loading, setLoading] = useState(true);
-  const [rows, setRows] = useState([]);
-  const [paidAmount, setPaidAmount] = useState(0);
-  const [dailyRate, setDailyRate] = useState(
-    Number(
-      user?.daily_rate ||
-        user?.rate ||
-        user?.amount_per_day ||
-        user?.wallet_rate ||
-        5000
-    )
-  );
-
   useEffect(() => {
-    let active = true;
-
-    async function loadWallet() {
-      setLoading(true);
-
-      const token = getToken();
-      const headers = {
-        Accept: "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      };
-
-      const walletResponse = await tryMany(
-        ["/trainer/wallet", "/wallet", "/trainer/earnings"],
-        { headers }
-      );
-
-      const attendanceResponse = await tryMany(
-        [
-          "/trainer/attendance",
-          "/attendance",
-          "/trainer/attendance-history",
-          "/trainer/internship-attendance",
-        ],
-        { headers }
-      );
-
-      if (!active) return;
-
-      let normalizedRows = [];
-      let resolvedPaidAmount = 0;
-      let resolvedRate = dailyRate;
-
-      if (walletResponse) {
-        resolvedPaidAmount = Number(
-          walletResponse?.paid_amount ||
-            walletResponse?.data?.paid_amount ||
-            walletResponse?.wallet?.paid_amount ||
-            0
-        );
-
-        resolvedRate = Number(
-          walletResponse?.daily_rate ||
-            walletResponse?.data?.daily_rate ||
-            walletResponse?.wallet?.daily_rate ||
-            resolvedRate
-        );
-      }
-
-      const attendanceRows = toArray(attendanceResponse);
-      if (attendanceRows.length > 0) {
-        normalizedRows = attendanceRows.map((item, index) =>
-          normalizeAttendanceRow(item, index, resolvedRate)
-        );
-      } else {
-        const walletRows = toArray(walletResponse);
-        if (walletRows.length > 0) {
-          normalizedRows = walletRows.map((item, index) =>
-            normalizeAttendanceRow(item, index, resolvedRate)
-          );
-        }
-      }
-
-      if (normalizedRows.length === 0) {
-        normalizedRows = fallbackRows;
-      }
-
-      setRows(normalizedRows);
-      setPaidAmount(resolvedPaidAmount);
-      setDailyRate(resolvedRate || 5000);
-      setLoading(false);
-    }
-
     loadWallet();
-
-    return () => {
-      active = false;
-    };
-  }, [dailyRate]);
+  }, []);
 
   const summary = useMemo(() => {
-    const servedRows = rows.filter((item) => isServedStatus(item.status));
-    const totalEarned = servedRows.reduce(
-      (sum, item) => sum + Number(item.earned || 0),
-      0
-    );
-
     const today = new Date();
     const currentMonth = today.getMonth();
     const currentYear = today.getFullYear();
 
-    const thisMonthRows = servedRows.filter((item) => {
+    const thisMonthRows = rows.filter((item) => {
       const date = new Date(item.date);
       if (Number.isNaN(date.getTime())) return false;
+
       return (
         date.getMonth() === currentMonth && date.getFullYear() === currentYear
       );
@@ -313,23 +268,31 @@ export default function Wallet() {
     );
 
     const thisMonthDays = thisMonthRows.length;
-    const servedDays = servedRows.length;
-    const averageRate =
-      servedRows.length > 0
-        ? Math.round(totalEarned / servedRows.length)
-        : Number(dailyRate || 0);
 
-    const availableBalance = totalEarned - Number(paidAmount || 0);
+    const paidRows = rows.filter((item) => item.isPaid);
+    const unpaidRows = rows.filter((item) => !item.isPaid);
 
     return {
-      servedDays,
-      totalEarned,
+      totalEarned: Number(reportSummary.total_salary || 0),
+      paidAmount: Number(reportSummary.total_paid || 0),
+      unpaidAmount: Number(reportSummary.total_unpaid || 0),
+      currentBalance: Number(currentUser.walletBalance || 0),
       thisMonthEarned,
       thisMonthDays,
-      averageRate,
-      availableBalance,
+      servedDays: Number(reportSummary.present || 0) + Number(reportSummary.late || 0),
+      averageRate:
+        rows.length > 0
+          ? Math.round(
+              rows.reduce((sum, item) => sum + Number(item.dailyRate || 0), 0) /
+                rows.length
+            )
+          : Number(currentUser.dailyRate || 0),
+      paidRows: paidRows.length,
+      unpaidRows: unpaidRows.length,
     };
-  }, [rows, paidAmount, dailyRate]);
+  }, [rows, reportSummary, currentUser.walletBalance, currentUser.dailyRate]);
+
+  const currency = currentUser.walletCurrency || "RWF";
 
   return (
     <div className="min-h-screen bg-[#070811] text-white">
@@ -341,51 +304,65 @@ export default function Wallet() {
                 Trainer Wallet
               </p>
               <h1 className="mt-1 text-2xl font-extrabold sm:text-3xl">
-                Welcome, {user?.name || "Trainer"}
+                Welcome, {currentUser?.name || "Trainer"}
               </h1>
               <p className="mt-2 max-w-2xl text-sm text-white/65">
-                This page shows how much the trainer deserves according to the
-                number of days served. The formula is:
-                <span className="ml-1 font-semibold text-white">
-                  Served Days × Daily Rate
-                </span>
+                This page shows your trainer wallet, your attendance earnings,
+                and unpaid salary generated from your recorded attendance.
               </p>
             </div>
 
-            <div className="rounded-2xl border border-[#6050F0]/30 bg-[#6050F0]/10 px-4 py-3">
-              <div className="text-xs uppercase tracking-[0.18em] text-[#B7B2FF]">
-                Available Balance
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="rounded-2xl border border-[#6050F0]/30 bg-[#6050F0]/10 px-4 py-3">
+                <div className="text-xs uppercase tracking-[0.18em] text-[#B7B2FF]">
+                  Wallet Balance
+                </div>
+                <div className="mt-1 text-2xl font-extrabold text-white">
+                  {formatCurrency(summary.currentBalance, currency)}
+                </div>
               </div>
-              <div className="mt-1 text-2xl font-extrabold text-white">
-                {formatCurrency(summary.availableBalance)}
-              </div>
+
+              <button
+                type="button"
+                onClick={() => loadWallet(true)}
+                disabled={refreshing}
+                className="inline-flex h-11 items-center justify-center rounded-2xl bg-white/[0.06] px-4 text-sm font-bold text-white transition hover:bg-white/[0.10] disabled:opacity-60"
+              >
+                {refreshing ? "Refreshing..." : "Refresh"}
+              </button>
             </div>
           </div>
         </div>
 
+        {pageError ? (
+          <div className="mb-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+            {pageError}
+          </div>
+        ) : null}
+
         <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
-            title="Total Earned"
-            value={formatCurrency(summary.totalEarned)}
-            note="All served days"
-            icon={<IconMoney />}
-          />
-          <StatCard
-            title="Served Days"
-            value={summary.servedDays}
-            note="Attendance counted as present"
-            icon={<IconCalendar />}
-          />
-          <StatCard
-            title="This Month"
-            value={formatCurrency(summary.thisMonthEarned)}
-            note={`${summary.thisMonthDays} served days this month`}
+            title="Wallet Balance"
+            value={formatCurrency(summary.currentBalance, currency)}
+            note={currentUser.walletStatus || "Wallet"}
             icon={<IconWallet />}
           />
           <StatCard
-            title="Average Rate / Day"
-            value={formatCurrency(summary.averageRate)}
-            note="Calculated from served days"
+            title="Unpaid Salary"
+            value={formatCurrency(summary.unpaidAmount, currency)}
+            note={`${summary.unpaidRows} unpaid attendance record(s)`}
+            icon={<IconMoney />}
+          />
+          <StatCard
+            title="Paid Salary"
+            value={formatCurrency(summary.paidAmount, currency)}
+            note={`${summary.paidRows} paid attendance record(s)`}
+            icon={<IconCalendar />}
+          />
+          <StatCard
+            title="Current Rate / Day"
+            value={formatCurrency(currentUser.dailyRate, currency)}
+            note="Trainer daily rate"
             icon={<IconRate />}
           />
         </div>
@@ -394,9 +371,9 @@ export default function Wallet() {
           <div className="xl:col-span-2 rounded-3xl border border-white/10 bg-white/[0.04] p-5">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-bold">Service Earnings History</h2>
+                <h2 className="text-lg font-bold">Attendance Earnings History</h2>
                 <p className="text-sm text-white/60">
-                  Amount earned for each day served
+                  Salary generated from your trainer attendance
                 </p>
               </div>
             </div>
@@ -406,11 +383,10 @@ export default function Wallet() {
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-[0.18em] text-white/45">
                     <th className="px-3 py-2">Date</th>
-                    <th className="px-3 py-2">Program</th>
-                    <th className="px-3 py-2">Shift</th>
                     <th className="px-3 py-2">Status</th>
                     <th className="px-3 py-2">Rate</th>
                     <th className="px-3 py-2">Earned</th>
+                    <th className="px-3 py-2">Payment</th>
                   </tr>
                 </thead>
 
@@ -418,7 +394,7 @@ export default function Wallet() {
                   {loading ? (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={5}
                         className="rounded-2xl bg-white/[0.03] px-3 py-6 text-center text-sm text-white/65"
                       >
                         Loading wallet data...
@@ -427,10 +403,10 @@ export default function Wallet() {
                   ) : rows.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={5}
                         className="rounded-2xl bg-white/[0.03] px-3 py-6 text-center text-sm text-white/65"
                       >
-                        No wallet data found.
+                        No attendance salary records found.
                       </td>
                     </tr>
                   ) : (
@@ -442,25 +418,33 @@ export default function Wallet() {
                         <td className="rounded-l-2xl px-3 py-3">
                           {formatDate(item.date)}
                         </td>
-                        <td className="px-3 py-3">{item.program}</td>
-                        <td className="px-3 py-3">{item.shift}</td>
                         <td className="px-3 py-3">
                           <span
                             className={[
                               "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize",
-                              isServedStatus(item.status)
-                                ? "bg-emerald-500/15 text-emerald-300"
-                                : "bg-rose-500/15 text-rose-300",
+                              statusBadgeClass(item.status),
                             ].join(" ")}
                           >
                             {item.status}
                           </span>
                         </td>
                         <td className="px-3 py-3">
-                          {formatCurrency(item.dailyRate)}
+                          {formatCurrency(item.dailyRate, currency)}
                         </td>
-                        <td className="rounded-r-2xl px-3 py-3 font-bold text-[#B7B2FF]">
-                          {formatCurrency(item.earned)}
+                        <td className="px-3 py-3 font-semibold text-[#B7B2FF]">
+                          {formatCurrency(item.earned, currency)}
+                        </td>
+                        <td className="rounded-r-2xl px-3 py-3">
+                          <span
+                            className={[
+                              "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold",
+                              item.isPaid
+                                ? "bg-emerald-500/15 text-emerald-300"
+                                : "bg-amber-500/15 text-amber-300",
+                            ].join(" ")}
+                          >
+                            {item.isPaid ? "Paid" : "Unpaid"}
+                          </span>
                         </td>
                       </tr>
                     ))
@@ -476,16 +460,20 @@ export default function Wallet() {
 
               <div className="mt-4 space-y-3">
                 <SummaryRow
-                  label="Total Earned"
-                  value={formatCurrency(summary.totalEarned)}
+                  label="Total Generated Salary"
+                  value={formatCurrency(summary.totalEarned, currency)}
                 />
                 <SummaryRow
-                  label="Paid Amount"
-                  value={formatCurrency(paidAmount)}
+                  label="Already Paid"
+                  value={formatCurrency(summary.paidAmount, currency)}
                 />
                 <SummaryRow
-                  label="Current Balance"
-                  value={formatCurrency(summary.availableBalance)}
+                  label="Still Unpaid"
+                  value={formatCurrency(summary.unpaidAmount, currency)}
+                />
+                <SummaryRow
+                  label="Wallet Balance"
+                  value={formatCurrency(summary.currentBalance, currency)}
                   strong
                 />
               </div>
@@ -495,27 +483,42 @@ export default function Wallet() {
               <h2 className="text-lg font-bold">How it works</h2>
               <div className="mt-4 space-y-3 text-sm text-white/75">
                 <p>
-                  1. Every day marked as <span className="font-bold">present</span>{" "}
-                  is counted as a served day.
+                  1. Trainer attendance is recorded every day.
                 </p>
                 <p>
-                  2. The served day is multiplied by the{" "}
+                  2. Salary is calculated from your attendance status and your{" "}
                   <span className="font-bold">daily rate</span>.
                 </p>
                 <p>
-                  3. The result becomes the trainer wallet amount.
+                  3. Paid salary increases your{" "}
+                  <span className="font-bold">wallet balance</span>.
                 </p>
               </div>
             </div>
 
             <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5">
-              <h2 className="text-lg font-bold">Current Rate</h2>
+              <h2 className="text-lg font-bold">This Month</h2>
               <p className="mt-2 text-3xl font-extrabold text-white">
-                {formatCurrency(dailyRate)}
+                {formatCurrency(summary.thisMonthEarned, currency)}
               </p>
               <p className="mt-2 text-sm text-white/60">
-                This is the daily amount used to calculate earnings.
+                Generated from {summary.thisMonthDays} attendance record(s) this month.
               </p>
+            </div>
+
+            <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5">
+              <h2 className="text-lg font-bold">Attendance Summary</h2>
+              <div className="mt-4 space-y-3">
+                <SummaryRow label="Present + Late Days" value={summary.servedDays} />
+                <SummaryRow
+                  label="Average Rate / Day"
+                  value={formatCurrency(summary.averageRate, currency)}
+                />
+                <SummaryRow
+                  label="Wallet Status"
+                  value={currentUser.walletStatus || "No wallet"}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -546,7 +549,13 @@ function SummaryRow({ label, value, strong = false }) {
   return (
     <div className="flex items-center justify-between rounded-2xl bg-white/[0.03] px-4 py-3">
       <span className="text-sm text-white/65">{label}</span>
-      <span className={strong ? "text-sm font-extrabold text-white" : "text-sm font-semibold text-white"}>
+      <span
+        className={
+          strong
+            ? "text-sm font-extrabold text-white"
+            : "text-sm font-semibold text-white"
+        }
+      >
         {value}
       </span>
     </div>
@@ -556,7 +565,15 @@ function SummaryRow({ label, value, strong = false }) {
 function IconMoney() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-      <rect x="3" y="6" width="18" height="12" rx="3" stroke="currentColor" strokeWidth="2" />
+      <rect
+        x="3"
+        y="6"
+        width="18"
+        height="12"
+        rx="3"
+        stroke="currentColor"
+        strokeWidth="2"
+      />
       <circle cx="12" cy="12" r="2.5" fill="currentColor" />
     </svg>
   );
