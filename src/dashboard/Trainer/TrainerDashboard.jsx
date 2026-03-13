@@ -778,47 +778,7 @@ export default function TrainerDashboard() {
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[1fr_1fr_1fr]">
-          <SectionCard title="Program Distribution" subtitle="Attendance records by program">
-            <div className="h-72">
-              {loading ? (
-                <div className="flex h-full items-center justify-center text-sm text-slate-500">
-                  Loading program data...
-                </div>
-              ) : programDistribution.length === 0 ? (
-                <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500">
-                  No program attendance data found.
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={programDistribution}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      vertical={false}
-                      stroke="#E2E8F0"
-                    />
-                    <XAxis
-                      dataKey="name"
-                      tick={{ fontSize: 12 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 12 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Bar
-                      dataKey="records"
-                      fill="#6050F0"
-                      radius={[12, 12, 0, 0]}
-                      name="Records"
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </SectionCard>
+         
 
           <SectionCard
             title="Shift Summary"
@@ -1009,29 +969,7 @@ export default function TrainerDashboard() {
               </div>
             </SectionCard>
 
-            <SectionCard title="Notes" subtitle="Important backend behavior">
-              <div className="space-y-3 text-sm text-slate-600">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  This dashboard reads from the protected route:
-                  <span className="ml-1 font-bold text-slate-900">
-                    /attendances
-                  </span>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  Available API filters used here:
-                  <span className="ml-1 font-bold text-slate-900">
-                    attendance_date, shift_ref, program_id
-                  </span>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  This page only shows what the backend returns. If you want
-                  trainer-specific attendance only, the backend must filter by
-                  the logged-in trainer.
-                </div>
-              </div>
-            </SectionCard>
+            
           </div>
         </div>
       </div>
