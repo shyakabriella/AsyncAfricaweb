@@ -190,7 +190,7 @@ export default function NavHeader() {
 
             <a href="tel:+250123456789" className="flex items-center gap-2 transition hover:text-[#6050F0]">
               <PhoneIcon />
-              <span>+250 782 667 888 / +250 784 434 216</span>
+              <span>+250 784 434 216</span>
             </a>
 
             <a
