@@ -4,6 +4,8 @@ import { useNavigate } from "react-router-dom";
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api";
 
+const PAGE_SIZE = 5;
+
 function getAuthToken() {
   return (
     localStorage.getItem("token") ||
@@ -16,18 +18,6 @@ function getAuthToken() {
 
 function normalizeText(value) {
   return String(value || "").trim();
-}
-
-function formatDate(value) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-
-  return date.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-  });
 }
 
 function getApplicantName(application) {
@@ -83,8 +73,6 @@ function matchesSearch(application, search) {
 
   const haystack = [
     getApplicantName(application),
-    application?.applicant?.email,
-    application?.applicant?.phone,
     getProgramTitle(application),
     getShiftTitle(application),
     application?.status,
@@ -189,17 +177,9 @@ function MobileApplicantCard({ application, onView, onDelete, deletingId }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="truncate text-sm font-bold text-slate-900">
-            {getApplicantName(application)}
-          </h3>
-          <p className="mt-1 truncate text-xs text-slate-500">
-            {application?.applicant?.email || "-"}
-          </p>
-          <p className="mt-1 text-xs text-slate-400">
-            {application?.applicant?.phone || "-"}
-          </p>
-        </div>
+        <h3 className="min-w-0 truncate text-sm font-bold text-slate-900">
+          {getApplicantName(application)}
+        </h3>
 
         <StatusBadge status={application?.status} />
       </div>
@@ -226,33 +206,70 @@ function MobileApplicantCard({ application, onView, onDelete, deletingId }) {
   );
 }
 
+function PaginationControls({
+  currentPage,
+  totalPages,
+  onPrevious,
+  onNext,
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-4 py-3">
+      <p className="text-xs text-slate-500">
+        Page {currentPage} of {totalPages}
+      </p>
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={onPrevious}
+          disabled={currentPage <= 1}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Previous
+        </button>
+
+        <button
+          type="button"
+          onClick={onNext}
+          disabled={currentPage >= totalPages}
+          className="rounded-lg bg-[#6050F0] px-3 py-2 text-[11px] font-bold text-white transition hover:bg-[#7A6CF5] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ShiftSection({
   shiftGroup,
   navigate,
   deletingId,
   handleDelete,
   isMobile = false,
+  onPreviousPage,
+  onNextPage,
 }) {
   if (isMobile) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
-        <div className="mb-3 flex items-center justify-between gap-3">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
           <div>
             <h3 className="text-sm font-black text-slate-900">
               {shiftGroup.title}
             </h3>
             <p className="mt-1 text-xs text-slate-500">
-              {shiftGroup.applications.length} applicant(s)
+              {shiftGroup.totalItems} applicant(s)
             </p>
           </div>
 
           <span className="rounded-full bg-white px-3 py-1 text-[11px] font-bold text-slate-600 shadow-sm">
-            {shiftGroup.applications.length}
+            {shiftGroup.totalItems}
           </span>
         </div>
 
-        <div className="grid gap-3">
-          {shiftGroup.applications.map((application) => (
+        <div className="grid gap-3 p-3">
+          {shiftGroup.pagedApplications.map((application) => (
             <MobileApplicantCard
               key={application.id}
               application={application}
@@ -262,6 +279,15 @@ function ShiftSection({
             />
           ))}
         </div>
+
+        {shiftGroup.totalPages > 1 ? (
+          <PaginationControls
+            currentPage={shiftGroup.currentPage}
+            totalPages={shiftGroup.totalPages}
+            onPrevious={() => onPreviousPage(shiftGroup.id)}
+            onNext={() => onNextPage(shiftGroup.id)}
+          />
+        ) : null}
       </div>
     );
   }
@@ -277,12 +303,12 @@ function ShiftSection({
         </div>
 
         <span className="rounded-full bg-white px-3 py-1 text-[11px] font-bold text-slate-600 shadow-sm">
-          {shiftGroup.applications.length} applicant(s)
+          {shiftGroup.totalItems} applicant(s)
         </span>
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[700px]">
+        <table className="w-full min-w-[560px]">
           <thead className="border-b border-slate-200 bg-white">
             <tr>
               <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
@@ -298,26 +324,15 @@ function ShiftSection({
           </thead>
 
           <tbody>
-            {shiftGroup.applications.map((application) => (
+            {shiftGroup.pagedApplications.map((application) => (
               <tr
                 key={application.id}
                 onClick={() => navigate(`/dashboard/applications/${application.id}`)}
                 className="cursor-pointer border-b border-slate-100 transition hover:bg-slate-50"
               >
                 <td className="px-4 py-4">
-                  <div className="max-w-[320px]">
-                    <div className="truncate text-sm font-bold text-slate-900">
-                      {getApplicantName(application)}
-                    </div>
-                    <div className="mt-1 truncate text-xs text-slate-500">
-                      {application?.applicant?.email || "-"}
-                    </div>
-                    <div className="mt-1 text-xs text-slate-400">
-                      {application?.applicant?.phone || "-"}
-                    </div>
-                    <div className="mt-1 text-[11px] text-slate-400">
-                      Submitted: {formatDate(application?.submitted_at)}
-                    </div>
+                  <div className="truncate text-sm font-bold text-slate-900">
+                    {getApplicantName(application)}
                   </div>
                 </td>
 
@@ -356,6 +371,15 @@ function ShiftSection({
           </tbody>
         </table>
       </div>
+
+      {shiftGroup.totalPages > 1 ? (
+        <PaginationControls
+          currentPage={shiftGroup.currentPage}
+          totalPages={shiftGroup.totalPages}
+          onPrevious={() => onPreviousPage(shiftGroup.id)}
+          onNext={() => onNextPage(shiftGroup.id)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -373,6 +397,7 @@ export default function ApplicationReceived() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [activeProgramId, setActiveProgramId] = useState("");
+  const [shiftPages, setShiftPages] = useState({});
 
   const fetchApplications = useCallback(async ({ silent = false } = {}) => {
     try {
@@ -490,6 +515,10 @@ export default function ApplicationReceived() {
     );
   }, [groupedPrograms, activeProgramId]);
 
+  useEffect(() => {
+    setShiftPages({});
+  }, [activeProgramId, search, statusFilter]);
+
   const filteredSelectedApplications = useMemo(() => {
     const rows = selectedProgram?.applications || [];
 
@@ -518,10 +547,28 @@ export default function ApplicationReceived() {
       map.get(id).applications.push(application);
     });
 
-    return Array.from(map.values()).sort((a, b) =>
-      a.title.localeCompare(b.title)
-    );
-  }, [filteredSelectedApplications]);
+    return Array.from(map.values())
+      .sort((a, b) => a.title.localeCompare(b.title))
+      .map((group) => {
+        const totalItems = group.applications.length;
+        const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+        const requestedPage = Number(shiftPages[group.id] || 1);
+        const currentPage = Math.min(Math.max(requestedPage, 1), totalPages);
+        const start = (currentPage - 1) * PAGE_SIZE;
+        const pagedApplications = group.applications.slice(
+          start,
+          start + PAGE_SIZE
+        );
+
+        return {
+          ...group,
+          totalItems,
+          totalPages,
+          currentPage,
+          pagedApplications,
+        };
+      });
+  }, [filteredSelectedApplications, shiftPages]);
 
   const overallStats = useMemo(() => {
     const total = applications.length;
@@ -594,6 +641,24 @@ export default function ApplicationReceived() {
     setSearchInput("");
     setSearch("");
     setStatusFilter("");
+    setShiftPages({});
+  }
+
+  function handlePreviousShiftPage(shiftId) {
+    setShiftPages((prev) => ({
+      ...prev,
+      [shiftId]: Math.max(1, Number(prev[shiftId] || 1) - 1),
+    }));
+  }
+
+  function handleNextShiftPage(shiftId) {
+    const group = shiftGroups.find((item) => String(item.id) === String(shiftId));
+    const maxPage = group?.totalPages || 1;
+
+    setShiftPages((prev) => ({
+      ...prev,
+      [shiftId]: Math.min(maxPage, Number(prev[shiftId] || 1) + 1),
+    }));
   }
 
   return (
@@ -609,7 +674,7 @@ export default function ApplicationReceived() {
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
               Click a program on the left, then applicants are split into the
-              existing shifts inside that program.
+              existing shifts. Each shift shows 5 applicants per page.
             </p>
           </div>
 
@@ -662,7 +727,7 @@ export default function ApplicationReceived() {
                 type="text"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search by name, email, phone..."
+                placeholder="Search by applicant name or shift..."
                 className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#7A6CF5]"
               />
             </div>
@@ -794,6 +859,8 @@ export default function ApplicationReceived() {
                         deletingId={deletingId}
                         handleDelete={handleDelete}
                         isMobile
+                        onPreviousPage={handlePreviousShiftPage}
+                        onNextPage={handleNextShiftPage}
                       />
                     ))}
                   </div>
@@ -806,6 +873,8 @@ export default function ApplicationReceived() {
                         navigate={navigate}
                         deletingId={deletingId}
                         handleDelete={handleDelete}
+                        onPreviousPage={handlePreviousShiftPage}
+                        onNextPage={handleNextShiftPage}
                       />
                     ))}
                   </div>
