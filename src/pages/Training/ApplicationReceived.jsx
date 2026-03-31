@@ -14,6 +14,10 @@ function getAuthToken() {
   );
 }
 
+function normalizeText(value) {
+  return String(value || "").trim();
+}
+
 function formatDate(value) {
   if (!value) return "-";
   const date = new Date(value);
@@ -26,8 +30,10 @@ function formatDate(value) {
   });
 }
 
-function normalizeText(value) {
-  return String(value || "").trim();
+function getApplicantName(application) {
+  const first = normalizeText(application?.applicant?.first_name);
+  const last = normalizeText(application?.applicant?.last_name);
+  return `${first} ${last}`.trim() || "Unknown Applicant";
 }
 
 function getProgramId(application) {
@@ -58,36 +64,44 @@ function getProgramMeta(application) {
   );
 }
 
-function getApplicantName(application) {
-  const first = normalizeText(application?.applicant?.first_name);
-  const last = normalizeText(application?.applicant?.last_name);
-  return `${first} ${last}`.trim() || "-";
+function getShiftId(application) {
+  return (
+    application?.shift?.id ||
+    application?.shift_id ||
+    normalizeText(application?.shift?.name).toLowerCase() ||
+    "unassigned-shift"
+  );
+}
+
+function getShiftTitle(application) {
+  return normalizeText(application?.shift?.name) || "Unassigned Shift";
 }
 
 function matchesSearch(application, search) {
-  const q = normalizeText(search).toLowerCase();
-  if (!q) return true;
+  const query = normalizeText(search).toLowerCase();
+  if (!query) return true;
 
   const haystack = [
     getApplicantName(application),
     application?.applicant?.email,
     application?.applicant?.phone,
     getProgramTitle(application),
-    getProgramMeta(application),
-    application?.shift?.name,
-    application?.experience_level,
+    getShiftTitle(application),
     application?.status,
   ]
     .map((item) => normalizeText(item).toLowerCase())
     .join(" ");
 
-  return haystack.includes(q);
+  return haystack.includes(query);
 }
 
 function matchesStatus(application, statusFilter) {
   if (!statusFilter) return true;
-  return normalizeText(application?.status).toLowerCase() ===
-    normalizeText(statusFilter).toLowerCase();
+
+  return (
+    normalizeText(application?.status).toLowerCase() ===
+    normalizeText(statusFilter).toLowerCase()
+  );
 }
 
 function StatusBadge({ status }) {
@@ -122,9 +136,7 @@ function StatCard({ label, value, hint }) {
       <h3 className="mt-2 text-2xl font-black leading-none text-slate-900">
         {value}
       </h3>
-      {hint ? (
-        <p className="mt-2 text-xs text-slate-500">{hint}</p>
-      ) : null}
+      {hint ? <p className="mt-2 text-xs text-slate-500">{hint}</p> : null}
     </div>
   );
 }
@@ -155,44 +167,25 @@ function ProgramSummaryCard({ program, active, onClick }) {
         </span>
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-        <div className="rounded-xl bg-slate-50 px-2 py-2">
-          <p className="text-[10px] uppercase tracking-[0.12em] text-slate-400">
-            Pending
-          </p>
-          <p className="mt-1 text-sm font-black text-slate-900">
-            {program.pending}
-          </p>
-        </div>
-
-        <div className="rounded-xl bg-emerald-50 px-2 py-2">
-          <p className="text-[10px] uppercase tracking-[0.12em] text-emerald-500">
-            Accepted
-          </p>
-          <p className="mt-1 text-sm font-black text-emerald-700">
-            {program.accepted}
-          </p>
-        </div>
-
-        <div className="rounded-xl bg-rose-50 px-2 py-2">
-          <p className="text-[10px] uppercase tracking-[0.12em] text-rose-500">
-            Rejected
-          </p>
-          <p className="mt-1 text-sm font-black text-rose-700">
-            {program.rejected}
-          </p>
-        </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
+          {program.shiftCount} shift(s)
+        </span>
+        <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700">
+          {program.pending} pending
+        </span>
+        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+          {program.accepted} accepted
+        </span>
+        <span className="rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-semibold text-rose-700">
+          {program.rejected} rejected
+        </span>
       </div>
     </button>
   );
 }
 
-function MobileApplicationCard({
-  application,
-  onView,
-  onDelete,
-  deletingId,
-}) {
+function MobileApplicantCard({ application, onView, onDelete, deletingId }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -203,39 +196,12 @@ function MobileApplicationCard({
           <p className="mt-1 truncate text-xs text-slate-500">
             {application?.applicant?.email || "-"}
           </p>
-        </div>
-
-        <StatusBadge status={application?.status} />
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
-        <div>
-          <p className="text-slate-400">Program</p>
-          <p className="mt-1 font-semibold text-slate-800">
-            {getProgramTitle(application)}
-          </p>
-        </div>
-
-        <div>
-          <p className="text-slate-400">Shift</p>
-          <p className="mt-1 font-semibold text-slate-800">
-            {application?.shift?.name || "-"}
-          </p>
-        </div>
-
-        <div>
-          <p className="text-slate-400">Phone</p>
-          <p className="mt-1 font-semibold text-slate-800">
+          <p className="mt-1 text-xs text-slate-400">
             {application?.applicant?.phone || "-"}
           </p>
         </div>
 
-        <div>
-          <p className="text-slate-400">Submitted</p>
-          <p className="mt-1 font-semibold text-slate-800">
-            {formatDate(application?.submitted_at)}
-          </p>
-        </div>
+        <StatusBadge status={application?.status} />
       </div>
 
       <div className="mt-4 flex gap-2">
@@ -260,6 +226,140 @@ function MobileApplicationCard({
   );
 }
 
+function ShiftSection({
+  shiftGroup,
+  navigate,
+  deletingId,
+  handleDelete,
+  isMobile = false,
+}) {
+  if (isMobile) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-black text-slate-900">
+              {shiftGroup.title}
+            </h3>
+            <p className="mt-1 text-xs text-slate-500">
+              {shiftGroup.applications.length} applicant(s)
+            </p>
+          </div>
+
+          <span className="rounded-full bg-white px-3 py-1 text-[11px] font-bold text-slate-600 shadow-sm">
+            {shiftGroup.applications.length}
+          </span>
+        </div>
+
+        <div className="grid gap-3">
+          {shiftGroup.applications.map((application) => (
+            <MobileApplicantCard
+              key={application.id}
+              application={application}
+              deletingId={deletingId}
+              onView={() => navigate(`/dashboard/applications/${application.id}`)}
+              onDelete={() => handleDelete(application.id)}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
+        <div>
+          <h3 className="text-sm font-black text-slate-900">{shiftGroup.title}</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            Applicants enrolled in this shift
+          </p>
+        </div>
+
+        <span className="rounded-full bg-white px-3 py-1 text-[11px] font-bold text-slate-600 shadow-sm">
+          {shiftGroup.applications.length} applicant(s)
+        </span>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[700px]">
+          <thead className="border-b border-slate-200 bg-white">
+            <tr>
+              <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                Applicant
+              </th>
+              <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                Status
+              </th>
+              <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                Action
+              </th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {shiftGroup.applications.map((application) => (
+              <tr
+                key={application.id}
+                onClick={() => navigate(`/dashboard/applications/${application.id}`)}
+                className="cursor-pointer border-b border-slate-100 transition hover:bg-slate-50"
+              >
+                <td className="px-4 py-4">
+                  <div className="max-w-[320px]">
+                    <div className="truncate text-sm font-bold text-slate-900">
+                      {getApplicantName(application)}
+                    </div>
+                    <div className="mt-1 truncate text-xs text-slate-500">
+                      {application?.applicant?.email || "-"}
+                    </div>
+                    <div className="mt-1 text-xs text-slate-400">
+                      {application?.applicant?.phone || "-"}
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-400">
+                      Submitted: {formatDate(application?.submitted_at)}
+                    </div>
+                  </div>
+                </td>
+
+                <td className="px-4 py-4">
+                  <StatusBadge status={application?.status} />
+                </td>
+
+                <td className="px-4 py-4">
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/dashboard/applications/${application.id}`);
+                      }}
+                      className="rounded-lg bg-indigo-50 px-3 py-2 text-[11px] font-bold text-indigo-700 transition hover:bg-indigo-100"
+                    >
+                      View
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(application.id);
+                      }}
+                      disabled={deletingId === application.id}
+                      className="rounded-lg bg-rose-50 px-3 py-2 text-[11px] font-bold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {deletingId === application.id ? "Deleting..." : "Delete"}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function ApplicationReceived() {
   const navigate = useNavigate();
 
@@ -274,57 +374,49 @@ export default function ApplicationReceived() {
   const [statusFilter, setStatusFilter] = useState("");
   const [activeProgramId, setActiveProgramId] = useState("");
 
-  const fetchApplications = useCallback(
-    async ({ silent = false } = {}) => {
-      try {
-        if (silent) {
-          setPageLoading(true);
-        } else {
-          setLoading(true);
-        }
+  const fetchApplications = useCallback(async ({ silent = false } = {}) => {
+    try {
+      if (silent) {
+        setPageLoading(true);
+      } else {
+        setLoading(true);
+      }
 
-        setError("");
-        setSuccessMessage("");
+      setError("");
+      setSuccessMessage("");
 
-        const token = getAuthToken();
+      const token = getAuthToken();
 
-        const params = new URLSearchParams();
-        if (search.trim()) params.append("search", search.trim());
-        if (statusFilter) params.append("status", statusFilter);
-
-        const url = `${API_BASE_URL.replace(/\/+$/, "")}/applications${
-          params.toString() ? `?${params.toString()}` : ""
-        }`;
-
-        const response = await fetch(url, {
+      const response = await fetch(
+        `${API_BASE_URL.replace(/\/+$/, "")}/applications`,
+        {
           headers: {
             Accept: "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-        });
-
-        const result = await response.json().catch(() => ({}));
-
-        if (!response.ok) {
-          throw new Error(result?.message || "Failed to load applications.");
         }
+      );
 
-        const rows = Array.isArray(result?.data?.data)
-          ? result.data.data
-          : Array.isArray(result?.data)
-          ? result.data
-          : [];
+      const result = await response.json().catch(() => ({}));
 
-        setApplications(rows);
-      } catch (err) {
-        setError(err?.message || "Could not load applications.");
-      } finally {
-        setLoading(false);
-        setPageLoading(false);
+      if (!response.ok) {
+        throw new Error(result?.message || "Failed to load applications.");
       }
-    },
-    [search, statusFilter]
-  );
+
+      const rows = Array.isArray(result?.data?.data)
+        ? result.data.data
+        : Array.isArray(result?.data)
+        ? result.data
+        : [];
+
+      setApplications(rows);
+    } catch (err) {
+      setError(err?.message || "Could not load applications.");
+    } finally {
+      setLoading(false);
+      setPageLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     fetchApplications();
@@ -337,6 +429,7 @@ export default function ApplicationReceived() {
       const id = String(getProgramId(application));
       const title = getProgramTitle(application);
       const meta = getProgramMeta(application);
+      const shiftId = String(getShiftId(application));
 
       if (!map.has(id)) {
         map.set(id, {
@@ -348,12 +441,14 @@ export default function ApplicationReceived() {
           pending: 0,
           accepted: 0,
           rejected: 0,
+          shifts: new Set(),
         });
       }
 
       const group = map.get(id);
       group.applications.push(application);
       group.total += 1;
+      group.shifts.add(shiftId);
 
       const status = normalizeText(application?.status).toLowerCase();
       if (status === "pending") group.pending += 1;
@@ -361,10 +456,15 @@ export default function ApplicationReceived() {
       if (status === "rejected") group.rejected += 1;
     });
 
-    return Array.from(map.values()).sort((a, b) => {
-      if (b.total !== a.total) return b.total - a.total;
-      return a.title.localeCompare(b.title);
-    });
+    return Array.from(map.values())
+      .map((program) => ({
+        ...program,
+        shiftCount: program.shifts.size,
+      }))
+      .sort((a, b) => {
+        if (b.total !== a.total) return b.total - a.total;
+        return a.title.localeCompare(b.title);
+      });
   }, [applications]);
 
   useEffect(() => {
@@ -373,11 +473,11 @@ export default function ApplicationReceived() {
       return;
     }
 
-    const stillExists = groupedPrograms.some(
+    const exists = groupedPrograms.some(
       (program) => String(program.id) === String(activeProgramId)
     );
 
-    if (!stillExists) {
+    if (!exists) {
       setActiveProgramId(String(groupedPrograms[0].id));
     }
   }, [groupedPrograms, activeProgramId]);
@@ -390,15 +490,38 @@ export default function ApplicationReceived() {
     );
   }, [groupedPrograms, activeProgramId]);
 
-  const visibleApplications = useMemo(() => {
+  const filteredSelectedApplications = useMemo(() => {
     const rows = selectedProgram?.applications || [];
 
     return rows.filter(
       (application) =>
-        matchesSearch(application, searchInput) &&
+        matchesSearch(application, search) &&
         matchesStatus(application, statusFilter)
     );
-  }, [selectedProgram, searchInput, statusFilter]);
+  }, [selectedProgram, search, statusFilter]);
+
+  const shiftGroups = useMemo(() => {
+    const map = new Map();
+
+    filteredSelectedApplications.forEach((application) => {
+      const id = String(getShiftId(application));
+      const title = getShiftTitle(application);
+
+      if (!map.has(id)) {
+        map.set(id, {
+          id,
+          title,
+          applications: [],
+        });
+      }
+
+      map.get(id).applications.push(application);
+    });
+
+    return Array.from(map.values()).sort((a, b) =>
+      a.title.localeCompare(b.title)
+    );
+  }, [filteredSelectedApplications]);
 
   const overallStats = useMemo(() => {
     const total = applications.length;
@@ -482,11 +605,11 @@ export default function ApplicationReceived() {
               Training Management
             </p>
             <h1 className="mt-2 text-2xl font-black text-slate-900 sm:text-3xl">
-              Applications by Program
+              Applications by Program & Shift
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-              Programs are separated now. Click any program to see only the
-              applicants enrolled in that program.
+              Click a program on the left, then applicants are split into the
+              existing shifts inside that program.
             </p>
           </div>
 
@@ -611,7 +734,7 @@ export default function ApplicationReceived() {
                     Programs
                   </h2>
                   <p className="mt-1 text-xs text-slate-500">
-                    Click a program to see its applicants
+                    Select a program to view its applicants
                   </p>
                 </div>
 
@@ -632,161 +755,59 @@ export default function ApplicationReceived() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <div className="flex flex-col gap-2 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                <div>
-                  <h2 className="text-base font-black text-slate-900 sm:text-lg">
-                    {selectedProgram?.title || "Program Applicants"}
-                  </h2>
-                  <p className="mt-1 text-xs text-slate-500 sm:text-sm">
-                    {selectedProgram?.meta || "Selected program"} •{" "}
-                    {visibleApplications.length} applicant(s) shown
-                  </p>
-                </div>
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="text-base font-black text-slate-900 sm:text-lg">
+                      {selectedProgram?.title || "Program Applicants"}
+                    </h2>
+                    <p className="mt-1 text-xs text-slate-500 sm:text-sm">
+                      {selectedProgram?.meta || "Selected program"} •{" "}
+                      {shiftGroups.length} shift section(s)
+                    </p>
+                  </div>
 
-                <span className="inline-flex w-fit rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold text-slate-600">
-                  {selectedProgram?.total || 0} total in program
-                </span>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="inline-flex w-fit rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold text-slate-600">
+                      {selectedProgram?.total || 0} total in program
+                    </span>
+                    <span className="inline-flex w-fit rounded-full bg-indigo-50 px-3 py-1 text-[11px] font-bold text-indigo-700">
+                      {filteredSelectedApplications.length} shown
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              {visibleApplications.length === 0 ? (
-                <div className="p-8 text-center text-sm text-slate-500">
+              {shiftGroups.length === 0 ? (
+                <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">
                   No applicants found for this program with the current filter.
                 </div>
               ) : (
                 <>
-                  <div className="grid gap-3 p-4 md:hidden">
-                    {visibleApplications.map((application) => (
-                      <MobileApplicationCard
-                        key={application.id}
-                        application={application}
+                  <div className="grid gap-4 md:hidden">
+                    {shiftGroups.map((shiftGroup) => (
+                      <ShiftSection
+                        key={shiftGroup.id}
+                        shiftGroup={shiftGroup}
+                        navigate={navigate}
                         deletingId={deletingId}
-                        onView={() =>
-                          navigate(`/dashboard/applications/${application.id}`)
-                        }
-                        onDelete={() => handleDelete(application.id)}
+                        handleDelete={handleDelete}
+                        isMobile
                       />
                     ))}
                   </div>
 
-                  <div className="hidden overflow-x-auto md:block">
-                    <table className="w-full min-w-[980px]">
-                      <thead className="border-b border-slate-200 bg-slate-50">
-                        <tr>
-                          <th className="px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                            Applicant
-                          </th>
-                          <th className="px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                            Program
-                          </th>
-                          <th className="px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                            Email
-                          </th>
-                          <th className="px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                            Shift
-                          </th>
-                          <th className="px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                            Experience
-                          </th>
-                          <th className="px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                            Status
-                          </th>
-                          <th className="px-3 py-3 text-left text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                            Submitted
-                          </th>
-                          <th className="px-3 py-3 text-right text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {visibleApplications.map((application) => (
-                          <tr
-                            key={application.id}
-                            onClick={() =>
-                              navigate(`/dashboard/applications/${application.id}`)
-                            }
-                            className="cursor-pointer border-b border-slate-100 transition hover:bg-slate-50"
-                          >
-                            <td className="px-3 py-3">
-                              <div className="max-w-[180px] truncate text-sm font-bold text-slate-900">
-                                {getApplicantName(application)}
-                              </div>
-                              <div className="mt-1 max-w-[180px] truncate text-xs text-slate-500">
-                                {application?.applicant?.phone || "-"}
-                              </div>
-                            </td>
-
-                            <td className="px-3 py-3">
-                              <div className="max-w-[170px] truncate text-sm font-semibold text-slate-800">
-                                {getProgramTitle(application)}
-                              </div>
-                              <div className="mt-1 max-w-[170px] truncate text-xs text-slate-500">
-                                {getProgramMeta(application)}
-                              </div>
-                            </td>
-
-                            <td className="px-3 py-3 text-sm text-slate-700">
-                              <div className="max-w-[190px] truncate">
-                                {application?.applicant?.email || "-"}
-                              </div>
-                            </td>
-
-                            <td className="px-3 py-3 text-sm text-slate-700">
-                              <div className="max-w-[130px] truncate">
-                                {application?.shift?.name || "-"}
-                              </div>
-                            </td>
-
-                            <td className="px-3 py-3 text-sm text-slate-700">
-                              <div className="max-w-[130px] truncate">
-                                {application?.experience_level || "-"}
-                              </div>
-                            </td>
-
-                            <td className="px-3 py-3">
-                              <StatusBadge status={application?.status} />
-                            </td>
-
-                            <td className="px-3 py-3 text-sm text-slate-700">
-                              {formatDate(application?.submitted_at)}
-                            </td>
-
-                            <td className="px-3 py-3">
-                              <div className="flex justify-end gap-2">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    navigate(
-                                      `/dashboard/applications/${application.id}`
-                                    );
-                                  }}
-                                  className="rounded-lg bg-indigo-50 px-3 py-2 text-[11px] font-bold text-indigo-700 transition hover:bg-indigo-100"
-                                >
-                                  View
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDelete(application.id);
-                                  }}
-                                  disabled={deletingId === application.id}
-                                  className="rounded-lg bg-rose-50 px-3 py-2 text-[11px] font-bold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                  {deletingId === application.id
-                                    ? "Deleting..."
-                                    : "Delete"}
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="hidden gap-4 md:grid">
+                    {shiftGroups.map((shiftGroup) => (
+                      <ShiftSection
+                        key={shiftGroup.id}
+                        shiftGroup={shiftGroup}
+                        navigate={navigate}
+                        deletingId={deletingId}
+                        handleDelete={handleDelete}
+                      />
+                    ))}
                   </div>
                 </>
               )}
