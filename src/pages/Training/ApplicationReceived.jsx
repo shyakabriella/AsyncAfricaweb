@@ -5,6 +5,7 @@ const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api";
 
 const PAGE_SIZE = 5;
+const API_FETCH_PAGE_SIZE = 100;
 
 function getAuthToken() {
   return (
@@ -76,6 +77,8 @@ function matchesSearch(application, search) {
     getProgramTitle(application),
     getShiftTitle(application),
     application?.status,
+    application?.applicant?.email,
+    application?.applicant?.phone,
   ]
     .map((item) => normalizeText(item).toLowerCase())
     .join(" ");
@@ -90,6 +93,26 @@ function matchesStatus(application, statusFilter) {
     normalizeText(application?.status).toLowerCase() ===
     normalizeText(statusFilter).toLowerCase()
   );
+}
+
+function uniqueApplicationsById(rows) {
+  const map = new Map();
+
+  rows.forEach((item) => {
+    const id = String(item?.id ?? "");
+    if (!id) return;
+    map.set(id, item);
+  });
+
+  return Array.from(map.values());
+}
+
+function buildApplicationsUrl(page = 1, perPage = API_FETCH_PAGE_SIZE) {
+  const base = `${API_BASE_URL.replace(/\/+$/, "")}/applications`;
+  const url = new URL(base);
+  url.searchParams.set("page", String(page));
+  url.searchParams.set("per_page", String(perPage));
+  return url.toString();
 }
 
 function StatusBadge({ status }) {
@@ -182,6 +205,10 @@ function MobileApplicantCard({ application, onView, onDelete, deletingId }) {
         </h3>
 
         <StatusBadge status={application?.status} />
+      </div>
+
+      <div className="mt-2 text-xs text-slate-500">
+        {getProgramTitle(application)} • {getShiftTitle(application)}
       </div>
 
       <div className="mt-4 flex gap-2">
@@ -388,6 +415,7 @@ export default function ApplicationReceived() {
   const navigate = useNavigate();
 
   const [applications, setApplications] = useState([]);
+  const [totalApplications, setTotalApplications] = useState(0);
   const [loading, setLoading] = useState(true);
   const [pageLoading, setPageLoading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
@@ -411,30 +439,52 @@ export default function ApplicationReceived() {
       setSuccessMessage("");
 
       const token = getAuthToken();
+      let currentPage = 1;
+      let lastPage = 1;
+      let backendTotal = 0;
+      const collectedRows = [];
 
-      const response = await fetch(
-        `${API_BASE_URL.replace(/\/+$/, "")}/applications`,
-        {
-          headers: {
-            Accept: "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
+      do {
+        const response = await fetch(
+          buildApplicationsUrl(currentPage, API_FETCH_PAGE_SIZE),
+          {
+            headers: {
+              Accept: "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+          }
+        );
+
+        const result = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(result?.message || "Failed to load applications.");
         }
-      );
 
-      const result = await response.json().catch(() => ({}));
+        const pageRows = Array.isArray(result?.data?.data)
+          ? result.data.data
+          : Array.isArray(result?.data)
+          ? result.data
+          : [];
 
-      if (!response.ok) {
-        throw new Error(result?.message || "Failed to load applications.");
-      }
+        collectedRows.push(...pageRows);
 
-      const rows = Array.isArray(result?.data?.data)
-        ? result.data.data
-        : Array.isArray(result?.data)
-        ? result.data
-        : [];
+        if (result?.data && !Array.isArray(result.data)) {
+          currentPage = Number(result.data.current_page || currentPage);
+          lastPage = Number(result.data.last_page || 1);
+          backendTotal = Number(result.data.total || 0);
+        } else {
+          lastPage = 1;
+          backendTotal = pageRows.length;
+        }
 
-      setApplications(rows);
+        currentPage += 1;
+      } while (currentPage <= lastPage);
+
+      const uniqueRows = uniqueApplicationsById(collectedRows);
+
+      setApplications(uniqueRows);
+      setTotalApplications(backendTotal || uniqueRows.length);
     } catch (err) {
       setError(err?.message || "Could not load applications.");
     } finally {
@@ -466,6 +516,8 @@ export default function ApplicationReceived() {
           pending: 0,
           accepted: 0,
           rejected: 0,
+          reviewed: 0,
+          waitlisted: 0,
           shifts: new Set(),
         });
       }
@@ -479,6 +531,8 @@ export default function ApplicationReceived() {
       if (status === "pending") group.pending += 1;
       if (status === "accepted") group.accepted += 1;
       if (status === "rejected") group.rejected += 1;
+      if (status === "reviewed") group.reviewed += 1;
+      if (status === "waitlisted") group.waitlisted += 1;
     });
 
     return Array.from(map.values())
@@ -571,7 +625,6 @@ export default function ApplicationReceived() {
   }, [filteredSelectedApplications, shiftPages]);
 
   const overallStats = useMemo(() => {
-    const total = applications.length;
     const pending = applications.filter(
       (item) => normalizeText(item.status).toLowerCase() === "pending"
     ).length;
@@ -583,13 +636,14 @@ export default function ApplicationReceived() {
     ).length;
 
     return {
-      total,
+      total: totalApplications || applications.length,
+      loaded: applications.length,
       pending,
       accepted,
       rejected,
       programs: groupedPrograms.length,
     };
-  }, [applications, groupedPrograms]);
+  }, [applications, groupedPrograms, totalApplications]);
 
   async function handleDelete(applicationId) {
     const confirmed = window.confirm(
@@ -625,6 +679,7 @@ export default function ApplicationReceived() {
       setApplications((prev) =>
         prev.filter((item) => String(item.id) !== String(applicationId))
       );
+      setTotalApplications((prev) => Math.max(0, Number(prev || 0) - 1));
       setSuccessMessage("Application deleted successfully.");
     } catch (err) {
       setError(err?.message || "Could not delete application.");
@@ -693,7 +748,7 @@ export default function ApplicationReceived() {
           <StatCard
             label="Total Applications"
             value={overallStats.total}
-            hint="All submitted applications"
+            hint={`Loaded ${overallStats.loaded} record(s)`}
           />
           <StatCard
             label="Programs"
@@ -727,7 +782,7 @@ export default function ApplicationReceived() {
                 type="text"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search by applicant name or shift..."
+                placeholder="Search by applicant name, email, phone or shift..."
                 className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#7A6CF5]"
               />
             </div>
