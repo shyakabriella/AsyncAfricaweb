@@ -1,4 +1,14 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+const API_BASE =
+  (
+    import.meta.env.VITE_API_URL ||
+    import.meta.env.VITE_API_BASE_URL ||
+    "http://127.0.0.1:8000/api"
+  ).replace(/\/$/, "");
+
+const AGENT_DASHBOARD_ENDPOINT = "/agents/me/dashboard";
+const SUCCESS_REFERRAL_STATUSES = ["approved", "paid", "active"];
 
 function parseStoredUser(value) {
   try {
@@ -9,6 +19,8 @@ function parseStoredUser(value) {
 }
 
 function getStoredUser() {
+  if (typeof window === "undefined") return {};
+
   const localUser = parseStoredUser(localStorage.getItem("user"));
   const sessionUser = parseStoredUser(sessionStorage.getItem("user"));
   const localAuthUser = parseStoredUser(localStorage.getItem("auth_user"));
@@ -22,189 +34,495 @@ function getStoredUser() {
   return {};
 }
 
+function getToken() {
+  if (typeof window === "undefined") return "";
+
+  return (
+    localStorage.getItem("token") ||
+    localStorage.getItem("auth_token") ||
+    localStorage.getItem("access_token") ||
+    sessionStorage.getItem("token") ||
+    sessionStorage.getItem("auth_token") ||
+    sessionStorage.getItem("access_token") ||
+    ""
+  );
+}
+
+function getHeaders() {
+  const token = getToken();
+
+  return {
+    Accept: "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+async function apiRequest(endpoint) {
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    headers: getHeaders(),
+  });
+
+  const result = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(result?.message || "Request failed.");
+  }
+
+  return result;
+}
+
+function formatCurrency(amount, currency = "RWF") {
+  return new Intl.NumberFormat("en-RW", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0,
+  }).format(Number(amount || 0));
+}
+
+function formatDate(dateValue) {
+  if (!dateValue) return "-";
+
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return dateValue;
+
+  return date.toLocaleDateString("en-GB", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatRoleLabel(role) {
+  const value = String(role || "").trim();
+  if (!value) return "Agent";
+
+  return value
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function getStatusBadgeClass(status) {
+  const value = String(status || "").toLowerCase();
+
+  if (value === "active" || value === "approved" || value === "paid") {
+    return "bg-emerald-100 text-emerald-700 border border-emerald-200";
+  }
+
+  if (value === "pending") {
+    return "bg-amber-100 text-amber-700 border border-amber-200";
+  }
+
+  if (value === "inactive" || value === "rejected" || value === "suspended") {
+    return "bg-rose-100 text-rose-700 border border-rose-200";
+  }
+
+  return "bg-slate-100 text-slate-700 border border-slate-200";
+}
+
+function isSuccessfulReferralStatus(status) {
+  return SUCCESS_REFERRAL_STATUSES.includes(String(status || "").toLowerCase());
+}
+
+function normalizeCurrentUser(item) {
+  return {
+    id: item?.id || "",
+    name: item?.name || "Agent",
+    email: item?.email || "",
+    phone: item?.phone || "",
+    walletBalance: Number(item?.wallet?.balance || 0),
+    walletCurrency: item?.wallet?.currency || "RWF",
+    walletStatus: item?.wallet?.status || "active",
+    role: item?.role?.slug || item?.roles?.[0]?.slug || item?.role || "agent",
+    commissionPercentage: Number(
+      item?.agent_profile?.commission_percentage || 0
+    ),
+  };
+}
+
+function normalizeAgentStudentRow(row, index, currency = "RWF") {
+  return {
+    id: row?.referral_id || index + 1,
+    studentId: row?.student_id || "",
+    studentName: row?.student_name || "Student",
+    studentEmail: row?.student_email || "",
+    studentPhone: row?.student_phone || "",
+    programName: row?.program?.name || "No Program",
+    programSlug: row?.program?.slug || "",
+    amountPaid: Number(row?.amount_paid || 0),
+    commissionPercentage: Number(row?.commission_percentage || 0),
+    commissionAmount: Number(row?.commission_amount || 0),
+    currency: row?.currency || currency,
+    status: row?.status || "pending",
+    registeredAt: row?.registered_at || null,
+    createdAt: row?.created_at || null,
+  };
+}
+
 function ProgressBar({ value, colorClass = "bg-indigo-600" }) {
+  const safeValue = Math.max(0, Math.min(100, Number(value || 0)));
+
   return (
     <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-100">
       <div
         className={`h-full rounded-full ${colorClass}`}
-        style={{ width: `${value}%` }}
+        style={{ width: `${safeValue}%` }}
       />
     </div>
   );
 }
 
 function MiniBarChart({ items }) {
+  const maxValue = Math.max(...items.map((item) => item.value), 1);
+
   return (
     <div className="mt-6">
-      <div className="flex h-52 items-end gap-3 rounded-3xl bg-slate-50 p-4">
-        {items.map((item) => (
-          <div key={item.label} className="flex flex-1 flex-col items-center justify-end">
-            <div className="mb-2 text-xs font-semibold text-slate-700">
-              {item.value}
-            </div>
+      <div className="flex h-56 items-end gap-3 rounded-3xl bg-slate-50 p-4">
+        {items.map((item) => {
+          const height = Math.max((item.value / maxValue) * 100, item.value > 0 ? 18 : 6);
+
+          return (
             <div
-              className={`w-full max-w-[48px] rounded-t-2xl ${item.color}`}
-              style={{ height: `${item.value}%`, minHeight: "22px" }}
-            />
-            <div className="mt-3 text-xs text-slate-500">{item.label}</div>
-          </div>
-        ))}
+              key={item.label}
+              className="flex flex-1 flex-col items-center justify-end"
+            >
+              <div className="mb-2 text-xs font-semibold text-slate-700">
+                {item.value}
+              </div>
+              <div
+                className={`w-full max-w-[52px] rounded-t-2xl ${item.color}`}
+                style={{ height: `${height}%` }}
+              />
+              <div className="mt-3 text-xs text-slate-500">{item.label}</div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
+function StatCard({ title, value, note, icon, progress, colorClass = "bg-indigo-600" }) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-slate-500">{title}</p>
+          <h3 className="mt-3 text-3xl font-bold text-slate-900">{value}</h3>
+          <p className="mt-2 text-sm text-slate-600">{note}</p>
+        </div>
+
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 text-2xl">
+          {icon}
+        </div>
+      </div>
+
+      <ProgressBar value={progress} colorClass={colorClass} />
+    </div>
+  );
+}
+
 export default function AgentDashboard() {
-  const user = useMemo(() => getStoredUser(), []);
-  const name = user?.name || "Agent";
-  const email = user?.email || "agent@asyncafrica.com";
+  const storedUser = getStoredUser();
 
-  const [chatInput, setChatInput] = useState("");
-  const [messages, setMessages] = useState([
-    {
-      id: 1,
-      sender: "Support",
-      text: "Hello! Welcome to the agent dashboard. Please follow up with your new leads today.",
-      time: "09:10 AM",
-      type: "incoming",
-    },
-    {
-      id: 2,
-      sender: name,
-      text: "Thank you. I am reviewing today’s applications and contacting schools.",
-      time: "09:14 AM",
-      type: "outgoing",
-    },
-    {
-      id: 3,
-      sender: "Manager",
-      text: "Good. Please also update the status of interested students before end of day.",
-      time: "09:18 AM",
-      type: "incoming",
-    },
-  ]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [pageError, setPageError] = useState("");
 
-  const stats = [
+  const [currentUser, setCurrentUser] = useState({
+    id: storedUser?.id || "",
+    name: storedUser?.name || "Agent",
+    email: storedUser?.email || "",
+    phone: storedUser?.phone || "",
+    walletBalance: Number(storedUser?.wallet?.balance || 0),
+    walletCurrency: storedUser?.wallet?.currency || "RWF",
+    walletStatus: storedUser?.wallet?.status || "active",
+    role:
+      storedUser?.role?.slug ||
+      storedUser?.roles?.[0]?.slug ||
+      storedUser?.role ||
+      "agent",
+    commissionPercentage: Number(
+      storedUser?.agent_profile?.commission_percentage || 0
+    ),
+  });
+
+  const [rows, setRows] = useState([]);
+  const [stats, setStats] = useState({
+    total_students: 0,
+    total_amount_paid: 0,
+    total_commission: 0,
+  });
+
+  async function loadDashboard(isRefresh = false) {
+    try {
+      setPageError("");
+
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
+      const [meResponse, dashboardResponse] = await Promise.all([
+        apiRequest("/me"),
+        apiRequest(AGENT_DASHBOARD_ENDPOINT),
+      ]);
+
+      const meData = normalizeCurrentUser(meResponse?.data || {});
+      const data = dashboardResponse?.data || {};
+
+      const wallet = data?.wallet || {};
+      const agentWallet = data?.agent?.wallet || {};
+      const statsData = data?.stats || {};
+      const students = Array.isArray(data?.students) ? data.students : [];
+
+      const walletBalance = Number(
+        wallet?.balance ??
+          agentWallet?.balance ??
+          meData.walletBalance ??
+          0
+      );
+
+      const walletCurrency =
+        wallet?.currency ||
+        agentWallet?.currency ||
+        meData.walletCurrency ||
+        "RWF";
+
+      const walletStatus =
+        wallet?.status ||
+        agentWallet?.status ||
+        meData.walletStatus ||
+        "active";
+
+      const commissionPercentage = Number(
+        data?.agent?.profile?.commission_percentage ??
+          meData.commissionPercentage ??
+          0
+      );
+
+      const role =
+        data?.agent?.role?.slug ||
+        meData.role ||
+        "agent";
+
+      setCurrentUser((prev) => ({
+        ...prev,
+        ...meData,
+        role,
+        walletBalance,
+        walletCurrency,
+        walletStatus,
+        commissionPercentage,
+      }));
+
+      setStats({
+        total_students: Number(statsData?.total_students || 0),
+        total_amount_paid: Number(statsData?.total_amount_paid || 0),
+        total_commission: Number(statsData?.total_commission || 0),
+      });
+
+      setRows(
+        students.map((item, index) =>
+          normalizeAgentStudentRow(item, index, walletCurrency)
+        )
+      );
+    } catch (error) {
+      setPageError(error?.message || "Could not load dashboard data.");
+      setRows([]);
+      setStats({
+        total_students: 0,
+        total_amount_paid: 0,
+        total_commission: 0,
+      });
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }
+
+  useEffect(() => {
+    loadDashboard(false);
+  }, []);
+
+  const summary = useMemo(() => {
+    const successfulRows = rows.filter((item) =>
+      isSuccessfulReferralStatus(item.status)
+    );
+
+    const pendingRows = rows.filter(
+      (item) => String(item.status || "").toLowerCase() === "pending"
+    );
+
+    const thisMonth = new Date();
+    const thisMonthRows = rows.filter((item) => {
+      const rawDate = item.registeredAt || item.createdAt;
+      if (!rawDate) return false;
+
+      const d = new Date(rawDate);
+      if (Number.isNaN(d.getTime())) return false;
+
+      return (
+        d.getMonth() === thisMonth.getMonth() &&
+        d.getFullYear() === thisMonth.getFullYear()
+      );
+    });
+
+    const averageCommission =
+      rows.length > 0
+        ? rows.reduce(
+            (sum, item) => sum + Number(item.commissionPercentage || 0),
+            0
+          ) / rows.length
+        : Number(currentUser.commissionPercentage || 0);
+
+    const conversionRate =
+      Number(stats.total_students || 0) > 0
+        ? (successfulRows.length / Number(stats.total_students || 1)) * 100
+        : 0;
+
+    return {
+      currentBalance: Number(currentUser.walletBalance || 0),
+      totalStudents: Number(stats.total_students || 0),
+      totalAmountPaid: Number(stats.total_amount_paid || 0),
+      totalCommission: Number(stats.total_commission || 0),
+      thisMonthStudents: thisMonthRows.length,
+      thisMonthCommission: thisMonthRows.reduce(
+        (sum, item) => sum + Number(item.commissionAmount || 0),
+        0
+      ),
+      approvedStudents: successfulRows.length,
+      pendingStudents: pendingRows.length,
+      averageCommission: Math.round(averageCommission * 100) / 100,
+      conversionRate: Math.round(conversionRate),
+    };
+  }, [rows, stats, currentUser.walletBalance, currentUser.commissionPercentage]);
+
+  const weeklyChartData = useMemo(() => {
+    const days = [];
+    const base = new Date();
+
+    for (let i = 6; i >= 0; i -= 1) {
+      const d = new Date(base);
+      d.setDate(base.getDate() - i);
+
+      const label = d.toLocaleDateString("en-GB", { weekday: "short" });
+
+      const count = rows.filter((item) => {
+        const rawDate = item.registeredAt || item.createdAt;
+        if (!rawDate) return false;
+
+        const rowDate = new Date(rawDate);
+        if (Number.isNaN(rowDate.getTime())) return false;
+
+        return (
+          rowDate.getDate() === d.getDate() &&
+          rowDate.getMonth() === d.getMonth() &&
+          rowDate.getFullYear() === d.getFullYear()
+        );
+      }).length;
+
+      days.push({
+        label,
+        value: count,
+        color:
+          i === 0
+            ? "bg-emerald-500"
+            : i <= 2
+            ? "bg-indigo-500"
+            : "bg-violet-500",
+      });
+    }
+
+    return days;
+  }, [rows]);
+
+  const topPrograms = useMemo(() => {
+    const grouped = rows.reduce((acc, row) => {
+      const key = row.programName || "No Program";
+
+      if (!acc[key]) {
+        acc[key] = {
+          name: row.programName || "No Program",
+          count: 0,
+          commission: 0,
+        };
+      }
+
+      acc[key].count += 1;
+      acc[key].commission += Number(row.commissionAmount || 0);
+
+      return acc;
+    }, {});
+
+    return Object.values(grouped)
+      .sort((a, b) => b.count - a.count || b.commission - a.commission)
+      .slice(0, 5);
+  }, [rows]);
+
+  const recentStudents = useMemo(() => {
+    return [...rows]
+      .sort((a, b) => {
+        const aDate = new Date(a.registeredAt || a.createdAt || 0).getTime();
+        const bDate = new Date(b.registeredAt || b.createdAt || 0).getTime();
+        return bDate - aDate;
+      })
+      .slice(0, 6);
+  }, [rows]);
+
+  const cardStats = [
     {
-      title: "New Leads",
-      value: "24",
-      note: "+6 this week",
-      progress: 76,
+      title: "Registered Students",
+      value: summary.totalStudents,
+      note: `${summary.thisMonthStudents} this month`,
+      progress:
+        summary.totalStudents > 0
+          ? Math.min(100, Math.round((summary.thisMonthStudents / summary.totalStudents) * 100))
+          : 0,
       colorClass: "bg-indigo-600",
-      icon: "👥",
+      icon: "👨‍🎓",
     },
     {
-      title: "Applications",
-      value: "18",
-      note: "Pending review",
-      progress: 64,
+      title: "Total Amount Paid",
+      value: formatCurrency(summary.totalAmountPaid, currentUser.walletCurrency),
+      note: "Paid amount from your registered students",
+      progress:
+        summary.totalAmountPaid > 0
+          ? Math.min(100, Math.round((summary.totalCommission / summary.totalAmountPaid) * 100))
+          : 0,
       colorClass: "bg-violet-600",
-      icon: "📝",
+      icon: "💰",
     },
     {
-      title: "Follow Ups",
-      value: "12",
-      note: "Need action today",
-      progress: 58,
-      colorClass: "bg-amber-500",
-      icon: "📞",
-    },
-    {
-      title: "Success Rate",
-      value: "82%",
-      note: "Strong performance",
-      progress: 82,
+      title: "Total Commission",
+      value: formatCurrency(summary.totalCommission, currentUser.walletCurrency),
+      note: `${summary.averageCommission}% average commission`,
+      progress: Math.min(100, Math.round(summary.averageCommission)),
       colorClass: "bg-emerald-600",
       icon: "📈",
     },
-  ];
-
-  const chartData = [
-    { label: "Mon", value: 45, color: "bg-indigo-500" },
-    { label: "Tue", value: 60, color: "bg-indigo-500" },
-    { label: "Wed", value: 75, color: "bg-violet-500" },
-    { label: "Thu", value: 52, color: "bg-sky-500" },
-    { label: "Fri", value: 88, color: "bg-emerald-500" },
-    { label: "Sat", value: 40, color: "bg-amber-500" },
-  ];
-
-  const pipeline = [
     {
-      title: "Interested Students",
-      value: 34,
-      bg: "bg-indigo-50",
-      text: "text-indigo-700",
-    },
-    {
-      title: "Reviewed Applications",
-      value: 21,
-      bg: "bg-violet-50",
-      text: "text-violet-700",
-    },
-    {
-      title: "Approved Cases",
-      value: 11,
-      bg: "bg-emerald-50",
-      text: "text-emerald-700",
-    },
-    {
-      title: "Need Attention",
-      value: 7,
-      bg: "bg-amber-50",
-      text: "text-amber-700",
-    },
-  ];
-
-  const recentTasks = [
-    {
-      title: "Call Kigali Technical School",
-      status: "In Progress",
-      statusClass: "bg-blue-100 text-blue-700",
-    },
-    {
-      title: "Review 5 new internship requests",
-      status: "Pending",
-      statusClass: "bg-amber-100 text-amber-700",
-    },
-    {
-      title: "Send admission details to 3 students",
-      status: "Completed",
-      statusClass: "bg-emerald-100 text-emerald-700",
-    },
-    {
-      title: "Update student follow-up notes",
-      status: "In Progress",
-      statusClass: "bg-blue-100 text-blue-700",
+      title: "Approved Rate",
+      value: `${summary.conversionRate}%`,
+      note: `${summary.approvedStudents} approved / paid students`,
+      progress: Math.min(100, summary.conversionRate),
+      colorClass: "bg-amber-500",
+      icon: "✅",
     },
   ];
 
   const quickActions = [
-    "Add new intern",
-    "Check wallet",
-    "Review applications",
-    "Contact schools",
+    "Register student",
+    "Open wallet",
+    "Check recent referrals",
+    "Review program performance",
   ];
 
-  const sendMessage = () => {
-    const value = chatInput.trim();
-    if (!value) return;
-
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: prev.length + 1,
-        sender: name,
-        text: value,
-        time: "Now",
-        type: "outgoing",
-      },
-    ]);
-    setChatInput("");
-  };
-
   return (
-    <div className="min-h-[calc(100vh-160px)]">
-      <div className="mx-auto w-full max-w-7xl space-y-6">
+    <div className="min-h-[calc(100vh-160px)] bg-slate-50">
+      <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
         <section className="overflow-hidden rounded-3xl bg-gradient-to-r from-[#4338ca] via-[#4f46e5] to-[#7c3aed] p-6 text-white shadow-xl md:p-8">
           <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
             <div className="max-w-3xl">
@@ -212,12 +530,12 @@ export default function AgentDashboard() {
                 Agent Workspace
               </p>
               <h1 className="mt-2 text-2xl font-bold md:text-4xl">
-                Welcome back, {name}
+                Welcome back, {currentUser.name || "Agent"}
               </h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-white/85 md:text-base">
-                This dashboard helps you track leads, applications, follow-ups,
-                and daily communication in one place. You can now manage your
-                work faster and more clearly.
+                This dashboard now shows real agent information from your system:
+                your students, payments, commissions, wallet balance, and recent
+                registration activity.
               </p>
 
               <div className="mt-5 flex flex-wrap gap-3">
@@ -237,47 +555,52 @@ export default function AgentDashboard() {
                 <p className="text-xs uppercase tracking-[0.2em] text-white/70">
                   Logged in as
                 </p>
-                <p className="mt-2 text-lg font-semibold">{name}</p>
-                <p className="text-sm text-white/80">{email}</p>
+                <p className="mt-2 text-lg font-semibold">
+                  {currentUser.name || "Agent"}
+                </p>
+                <p className="text-sm text-white/80">
+                  {currentUser.email || "-"}
+                </p>
               </div>
 
               <div className="rounded-2xl bg-white/10 p-4 backdrop-blur-md">
                 <p className="text-xs uppercase tracking-[0.2em] text-white/70">
-                  Today Focus
+                  Wallet Balance
                 </p>
-                <p className="mt-2 text-lg font-semibold">Follow-up & Approval</p>
+                <p className="mt-2 text-lg font-semibold">
+                  {formatCurrency(
+                    summary.currentBalance,
+                    currentUser.walletCurrency || "RWF"
+                  )}
+                </p>
                 <p className="text-sm text-white/80">
-                  Keep applications updated and answer messages quickly.
+                  Default commission: {currentUser.commissionPercentage || 0}%
                 </p>
               </div>
             </div>
           </div>
         </section>
 
+        {pageError ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {pageError}
+          </div>
+        ) : null}
+
+        <div className="flex items-center justify-end">
+          <button
+            type="button"
+            onClick={() => loadDashboard(true)}
+            disabled={refreshing}
+            className="inline-flex h-11 items-center justify-center rounded-2xl bg-indigo-600 px-5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {refreshing ? "Refreshing..." : "Refresh"}
+          </button>
+        </div>
+
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {stats.map((card) => (
-            <div
-              key={card.title}
-              className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium text-slate-500">
-                    {card.title}
-                  </p>
-                  <h3 className="mt-3 text-3xl font-bold text-slate-900">
-                    {card.value}
-                  </h3>
-                  <p className="mt-2 text-sm text-slate-600">{card.note}</p>
-                </div>
-
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 text-2xl">
-                  {card.icon}
-                </div>
-              </div>
-
-              <ProgressBar value={card.progress} colorClass={card.colorClass} />
-            </div>
+          {cardStats.map((card) => (
+            <StatCard key={card.title} {...card} />
           ))}
         </section>
 
@@ -286,19 +609,19 @@ export default function AgentDashboard() {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-xl font-bold text-slate-900">
-                  Weekly Performance Graphic
+                  Weekly Student Registrations
                 </h2>
                 <p className="mt-1 text-sm text-slate-600">
-                  Visual view of your weekly agent activity and progress.
+                  Real registrations made by this agent in the last 7 days.
                 </p>
               </div>
 
               <div className="rounded-full bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700">
-                Performance Overview
+                Live Overview
               </div>
             </div>
 
-            <MiniBarChart items={chartData} />
+            <MiniBarChart items={weeklyChartData} />
           </div>
 
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -306,12 +629,16 @@ export default function AgentDashboard() {
 
             <div className="mt-5 flex items-center gap-4">
               <div className="flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 text-lg font-bold text-white">
-                {(name?.[0] || "A").toUpperCase()}
+                {(currentUser.name?.[0] || "A").toUpperCase()}
               </div>
 
               <div>
-                <p className="text-base font-semibold text-slate-900">{name}</p>
-                <p className="text-sm text-slate-500">{email}</p>
+                <p className="text-base font-semibold text-slate-900">
+                  {currentUser.name || "Agent"}
+                </p>
+                <p className="text-sm text-slate-500">
+                  {currentUser.email || "-"}
+                </p>
               </div>
             </div>
 
@@ -321,25 +648,25 @@ export default function AgentDashboard() {
                   Role
                 </p>
                 <p className="mt-1 text-sm font-semibold text-slate-900">
-                  Agent
+                  {formatRoleLabel(currentUser.role)}
                 </p>
               </div>
 
               <div className="rounded-2xl bg-slate-50 px-4 py-3">
                 <p className="text-xs uppercase tracking-wide text-slate-400">
-                  Access
+                  Phone
                 </p>
                 <p className="mt-1 text-sm font-semibold text-slate-900">
-                  Agent Dashboard
+                  {currentUser.phone || "-"}
                 </p>
               </div>
 
               <div className="rounded-2xl bg-slate-50 px-4 py-3">
                 <p className="text-xs uppercase tracking-wide text-slate-400">
-                  Status
+                  Wallet Status
                 </p>
                 <p className="mt-1 text-sm font-semibold text-emerald-600">
-                  Logged In
+                  {currentUser.walletStatus || "active"}
                 </p>
               </div>
             </div>
@@ -349,61 +676,101 @@ export default function AgentDashboard() {
         <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm xl:col-span-2">
             <h2 className="text-xl font-bold text-slate-900">
-              Agent Activity Overview
+              Referral Activity Overview
             </h2>
             <p className="mt-2 text-sm leading-7 text-slate-600">
-              This section gives you a clear picture of student interest,
-              reviewed applications, approvals, and items that still need your
-              attention.
+              This section summarizes real student referral performance for this
+              agent based on current data from the system.
             </p>
 
             <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {pipeline.map((item) => (
-                <div
-                  key={item.title}
-                  className={`rounded-2xl p-5 ${item.bg}`}
-                >
-                  <p className="text-sm font-medium text-slate-600">
-                    {item.title}
-                  </p>
-                  <div className={`mt-2 text-3xl font-bold ${item.text}`}>
-                    {item.value}
-                  </div>
+              <div className="rounded-2xl bg-indigo-50 p-5">
+                <p className="text-sm font-medium text-slate-600">
+                  Approved / Paid Students
+                </p>
+                <div className="mt-2 text-3xl font-bold text-indigo-700">
+                  {summary.approvedStudents}
                 </div>
-              ))}
+              </div>
+
+              <div className="rounded-2xl bg-amber-50 p-5">
+                <p className="text-sm font-medium text-slate-600">
+                  Pending Students
+                </p>
+                <div className="mt-2 text-3xl font-bold text-amber-700">
+                  {summary.pendingStudents}
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-emerald-50 p-5">
+                <p className="text-sm font-medium text-slate-600">
+                  This Month Commission
+                </p>
+                <div className="mt-2 text-3xl font-bold text-emerald-700">
+                  {formatCurrency(
+                    summary.thisMonthCommission,
+                    currentUser.walletCurrency
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-violet-50 p-5">
+                <p className="text-sm font-medium text-slate-600">
+                  This Month Students
+                </p>
+                <div className="mt-2 text-3xl font-bold text-violet-700">
+                  {summary.thisMonthStudents}
+                </div>
+              </div>
             </div>
 
             <div className="mt-6 rounded-2xl bg-slate-50 p-4">
               <p className="text-sm font-semibold text-slate-800">
-                Agent Note
+                Performance Note
               </p>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Focus first on students who already showed interest, then review
-                pending cases, and finally update all notes so the team sees the
-                latest status.
+                Approved students and paid amounts now come from the actual agent
+                referral records, so this section changes automatically whenever
+                new students are registered or their payment status changes.
               </p>
             </div>
           </div>
 
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-bold text-slate-900">Recent Tasks</h2>
+            <h2 className="text-lg font-bold text-slate-900">Top Programs</h2>
 
             <div className="mt-5 space-y-3">
-              {recentTasks.map((task) => (
-                <div
-                  key={task.title}
-                  className="rounded-2xl border border-slate-100 bg-slate-50 p-4"
-                >
-                  <p className="text-sm font-semibold text-slate-900">
-                    {task.title}
-                  </p>
-                  <span
-                    className={`mt-3 inline-flex rounded-full px-3 py-1 text-xs font-semibold ${task.statusClass}`}
-                  >
-                    {task.status}
-                  </span>
+              {loading ? (
+                <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
+                  Loading programs...
                 </div>
-              ))}
+              ) : topPrograms.length === 0 ? (
+                <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
+                  No program data yet.
+                </div>
+              ) : (
+                topPrograms.map((item) => (
+                  <div
+                    key={item.name}
+                    className="rounded-2xl border border-slate-100 bg-slate-50 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {item.name}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {item.count} student{item.count === 1 ? "" : "s"}
+                        </p>
+                      </div>
+
+                      <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-700">
+                        {formatCurrency(item.commission, currentUser.walletCurrency)}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </section>
@@ -413,103 +780,134 @@ export default function AgentDashboard() {
             <div className="flex items-center justify-between gap-4">
               <div>
                 <h2 className="text-xl font-bold text-slate-900">
-                  Team Chat
+                  Recent Registered Students
                 </h2>
                 <p className="mt-1 text-sm text-slate-600">
-                  Communicate with support, manager, or your team directly here.
+                  Latest students registered under this agent.
                 </p>
               </div>
 
               <div className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">
-                Online
+                {recentStudents.length} shown
               </div>
             </div>
 
-            <div className="mt-6 h-[360px] overflow-y-auto rounded-3xl bg-slate-50 p-4">
-              <div className="space-y-4">
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex ${
-                      message.type === "outgoing" ? "justify-end" : "justify-start"
-                    }`}
-                  >
-                    <div
-                      className={`max-w-[85%] rounded-2xl px-4 py-3 shadow-sm ${
-                        message.type === "outgoing"
-                          ? "bg-indigo-600 text-white"
-                          : "bg-white text-slate-800"
-                      }`}
-                    >
-                      <p className="text-xs font-semibold opacity-80">
-                        {message.sender}
-                      </p>
-                      <p className="mt-1 text-sm leading-6">{message.text}</p>
-                      <p
-                        className={`mt-2 text-[11px] ${
-                          message.type === "outgoing"
-                            ? "text-white/75"
-                            : "text-slate-400"
-                        }`}
+            <div className="mt-6 overflow-x-auto">
+              <table className="min-w-full text-left">
+                <thead className="bg-slate-50">
+                  <tr className="text-xs uppercase tracking-[0.14em] text-slate-500">
+                    <th className="px-4 py-3 font-semibold">Student</th>
+                    <th className="px-4 py-3 font-semibold">Program</th>
+                    <th className="px-4 py-3 font-semibold">Amount Paid</th>
+                    <th className="px-4 py-3 font-semibold">Commission</th>
+                    <th className="px-4 py-3 font-semibold">Status</th>
+                    <th className="px-4 py-3 font-semibold">Registered</th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {loading ? (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="px-4 py-8 text-center text-sm text-slate-500"
                       >
-                        {message.time}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+                        Loading dashboard data...
+                      </td>
+                    </tr>
+                  ) : recentStudents.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="px-4 py-8 text-center text-sm text-slate-500"
+                      >
+                        No students registered under this agent yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    recentStudents.map((student) => (
+                      <tr key={student.id}>
+                        <td className="px-4 py-4 align-top">
+                          <div className="font-semibold text-slate-900">
+                            {student.studentName}
+                          </div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            {student.studentEmail || student.studentPhone || "-"}
+                          </div>
+                        </td>
 
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") sendMessage();
-                }}
-                placeholder="Write your message here..."
-                className="h-12 flex-1 rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-800 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-              />
-              <button
-                type="button"
-                onClick={sendMessage}
-                className="h-12 rounded-2xl bg-indigo-600 px-6 text-sm font-semibold text-white transition hover:bg-indigo-700"
-              >
-                Send
-              </button>
+                        <td className="px-4 py-4 align-top">
+                          <div className="font-medium text-slate-900">
+                            {student.programName}
+                          </div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            {student.programSlug || "-"}
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-4 text-sm font-semibold text-slate-700">
+                          {formatCurrency(student.amountPaid, student.currency)}
+                        </td>
+
+                        <td className="px-4 py-4 text-sm font-semibold text-indigo-700">
+                          {formatCurrency(student.commissionAmount, student.currency)}
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusBadgeClass(
+                              student.status
+                            )}`}
+                          >
+                            {student.status || "pending"}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-4 text-sm text-slate-600">
+                          {formatDate(student.registeredAt || student.createdAt)}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
 
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-bold text-slate-900">
-              Chat Related Info
-            </h2>
+            <h2 className="text-lg font-bold text-slate-900">Quick View</h2>
 
             <div className="mt-5 space-y-4">
               <div className="rounded-2xl bg-slate-50 p-4">
                 <p className="text-sm font-semibold text-slate-900">
-                  Support Status
+                  Wallet Balance
                 </p>
-                <p className="mt-2 text-sm text-emerald-600">
-                  Available now
+                <p className="mt-2 text-2xl font-bold text-slate-900">
+                  {formatCurrency(
+                    summary.currentBalance,
+                    currentUser.walletCurrency
+                  )}
                 </p>
               </div>
 
               <div className="rounded-2xl bg-slate-50 p-4">
                 <p className="text-sm font-semibold text-slate-900">
-                  Unread Messages
+                  Total Students
                 </p>
-                <p className="mt-2 text-2xl font-bold text-slate-900">03</p>
+                <p className="mt-2 text-2xl font-bold text-slate-900">
+                  {summary.totalStudents}
+                </p>
               </div>
 
               <div className="rounded-2xl bg-slate-50 p-4">
                 <p className="text-sm font-semibold text-slate-900">
-                  Last Team Update
+                  Total Commission
                 </p>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Please confirm contacted schools and update student records
-                  before 5:00 PM.
+                <p className="mt-2 text-2xl font-bold text-slate-900">
+                  {formatCurrency(
+                    summary.totalCommission,
+                    currentUser.walletCurrency
+                  )}
                 </p>
               </div>
 
@@ -518,8 +916,9 @@ export default function AgentDashboard() {
                   Suggestion
                 </p>
                 <p className="mt-2 text-sm leading-6 text-indigo-700">
-                  Use chat for quick coordination, then update the dashboard
-                  status after each follow-up.
+                  Focus on pending students first, then move them to approved
+                  status after payment confirmation so wallet and dashboard stay
+                  updated correctly.
                 </p>
               </div>
             </div>
