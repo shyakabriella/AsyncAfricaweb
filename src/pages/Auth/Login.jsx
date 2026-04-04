@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import {
   clearStoredAuth,
@@ -38,6 +38,7 @@ function getMessage(payload) {
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [formData, setFormData] = useState({
     email: "",
@@ -71,6 +72,20 @@ export default function Login() {
       clearStoredAuth();
     }
   }, [navigate]);
+
+  useEffect(() => {
+    if (location.state?.sessionExpired) {
+      setErrorMessage(
+        location.state?.message ||
+          "You were logged out after 2 minutes of inactivity."
+      );
+
+      navigate("/login", {
+        replace: true,
+        state: {},
+      });
+    }
+  }, [location.state, navigate]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;

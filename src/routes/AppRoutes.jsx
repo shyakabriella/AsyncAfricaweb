@@ -4,6 +4,7 @@ import Layouts from "../components/Layouts";
 import DashboardLayouts from "../components/DashboardLayouts";
 import AdminDashboard from "../components/AdminDashboard";
 import CustomerChatWidget from "../components/support/CustomerChatWidget";
+import SessionWatcher from "../components/SessionWatcher";
 
 import Home from "../pages/Home";
 import Login from "../pages/Auth/Login";
@@ -100,6 +101,8 @@ export default function AppRoutes() {
 
   return (
     <>
+      <SessionWatcher />
+
       <Routes>
         <Route path="/" element={<Layouts />}>
           <Route index element={<Home />} />
