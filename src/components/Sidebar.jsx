@@ -40,13 +40,28 @@ function normalizeRole(value) {
   if (role === "student") return "student";
   if (role === "students") return "student";
 
+  if (role === "agent") return "agent";
+  if (role === "agents") return "agent";
+
+  if (role === "school owner") return "school_owner";
+  if (role === "school-owner") return "school_owner";
+  if (role === "school_owner") return "school_owner";
+  if (role === "school owners") return "school_owner";
+  if (role === "schoolowners") return "school_owner";
+  if (role === "schoolowner") return "school_owner";
+
   return role;
 }
 
 function isKnownRole(role) {
-  return ["admin", "ceo", "trainer", "student"].includes(
-    normalizeRole(role)
-  );
+  return [
+    "admin",
+    "ceo",
+    "trainer",
+    "student",
+    "agent",
+    "school_owner",
+  ].includes(normalizeRole(role));
 }
 
 function getRoleFromUser(user) {
@@ -113,6 +128,10 @@ function getPanelLabel(role) {
       return "Trainer Panel";
     case "student":
       return "Student Panel";
+    case "agent":
+      return "Agent Panel";
+    case "school_owner":
+      return "School Owner Panel";
     default:
       return "User Panel";
   }
@@ -128,6 +147,10 @@ function getDashboardHomePath(role) {
       return "/dashboard/trainer";
     case "student":
       return "/dashboard/student";
+    case "agent":
+      return "/dashboard/agent";
+    case "school_owner":
+      return "/dashboard/agents";
     default:
       return "/dashboard";
   }
@@ -143,6 +166,10 @@ function getDefaultName(role) {
       return "Trainer User";
     case "student":
       return "Student User";
+    case "agent":
+      return "Agent User";
+    case "school_owner":
+      return "School Owner";
     default:
       return "User";
   }
@@ -158,6 +185,10 @@ function getDefaultEmail(role) {
       return "trainer@asyncafrica.com";
     case "student":
       return "student@asyncafrica.com";
+    case "agent":
+      return "agent@asyncafrica.com";
+    case "school_owner":
+      return "schoolowner@asyncafrica.com";
     default:
       return "user@asyncafrica.com";
   }
@@ -178,6 +209,8 @@ export default function Sidebar({ open = true, onClose = () => {} }) {
   const isCeo = role === "ceo";
   const isAdmin = role === "admin";
   const isStudent = role === "student";
+  const isAgent = role === "agent";
+  const isSchoolOwner = role === "school_owner";
 
   const logout = () => {
     localStorage.removeItem("token");
@@ -199,7 +232,7 @@ export default function Sidebar({ open = true, onClose = () => {} }) {
   };
 
   const handleMobileClose = () => {
-    if (window.innerWidth < 1024) {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
       onClose();
     }
   };
@@ -294,6 +327,36 @@ export default function Sidebar({ open = true, onClose = () => {} }) {
                   onClick={handleMobileClose}
                 />
               </>
+            ) : isAgent ? (
+              <>
+                <Item
+                  to="/dashboard/agent"
+                  label="Dashboard"
+                  icon={<IconDashboard />}
+                  onClick={handleMobileClose}
+                />
+                <Item
+                  to="/dashboard/wallet"
+                  label="Wallet"
+                  icon={<IconWallet />}
+                  onClick={handleMobileClose}
+                />
+                <Item
+                  to="/dashboard/agent/addintern"
+                  label="Add Intern"
+                  icon={<IconUsers />}
+                  onClick={handleMobileClose}
+                />
+              </>
+            ) : isSchoolOwner ? (
+              <>
+                <Item
+                  to="/dashboard/agents"
+                  label="Dashboard"
+                  icon={<IconDashboard />}
+                  onClick={handleMobileClose}
+                />
+              </>
             ) : (
               <>
                 <Item
@@ -309,6 +372,12 @@ export default function Sidebar({ open = true, onClose = () => {} }) {
                       to="/dashboard/users"
                       label="Users"
                       icon={<IconUsers />}
+                      onClick={handleMobileClose}
+                    />
+                    <Item
+                      to="/dashboard/agents"
+                      label="Agents"
+                      icon={<IconAgent />}
                       onClick={handleMobileClose}
                     />
                     <Item
@@ -358,6 +427,12 @@ export default function Sidebar({ open = true, onClose = () => {} }) {
 
                 {isCeo && (
                   <>
+                    <Item
+                      to="/dashboard/agents"
+                      label="Agents"
+                      icon={<IconAgent />}
+                      onClick={handleMobileClose}
+                    />
                     <Item
                       to="/dashboard/reports"
                       label="Reports"
@@ -417,7 +492,9 @@ function Item({ to, label, icon, onClick }) {
         to === "/dashboard/admin" ||
         to === "/dashboard/ceo" ||
         to === "/dashboard/trainer" ||
-        to === "/dashboard/student"
+        to === "/dashboard/student" ||
+        to === "/dashboard/agent" ||
+        to === "/dashboard/agents"
       }
       onClick={onClick}
       className={({ isActive }) =>
@@ -460,6 +537,30 @@ function IconUsers() {
       <path
         d="M8 14c-3.2 0-5.5 1.8-5.5 4v1h11v-1c0-2.2-2.3-4-5.5-4Zm8 0c-.6 0-1.2.07-1.75.2 1.1.84 1.75 1.95 1.75 3.3v1H22v-.8c0-2.1-2.3-3.7-6-3.7Z"
         fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function IconAgent() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"
+        fill="currentColor"
+        opacity="0.95"
+      />
+      <path
+        d="M4 20a8 8 0 0 1 16 0"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M18 7h3M19.5 5.5v3"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
       />
     </svg>
   );

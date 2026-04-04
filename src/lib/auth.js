@@ -30,13 +30,28 @@ export function normalizeRole(value) {
   if (role === "student") return "student";
   if (role === "students") return "student";
 
+  if (role === "agent") return "agent";
+  if (role === "agents") return "agent";
+
+  if (role === "school owner") return "school_owner";
+  if (role === "school-owner") return "school_owner";
+  if (role === "school_owner") return "school_owner";
+  if (role === "school owners") return "school_owner";
+  if (role === "schoolowners") return "school_owner";
+  if (role === "schoolowner") return "school_owner";
+
   return role;
 }
 
 export function isKnownRole(role) {
-  return ["admin", "ceo", "trainer", "student"].includes(
-    normalizeRole(role)
-  );
+  return [
+    "admin",
+    "ceo",
+    "trainer",
+    "student",
+    "agent",
+    "school_owner",
+  ].includes(normalizeRole(role));
 }
 
 function parseJson(value) {
@@ -229,6 +244,10 @@ export function getDashboardPathByRole(role) {
       return "/dashboard/trainer";
     case "student":
       return "/";
+    case "agent":
+      return "/dashboard/agent";
+    case "school_owner":
+      return "/dashboard/agents";
     default:
       return "/login";
   }
