@@ -27,6 +27,7 @@ import ServiceDirectory from "../dashboard/ServiceDirectory";
 import SystemSetting from "../dashboard/SystemSetting";
 import Internaship from "../dashboard/Internaship";
 import AgentPage from "../dashboard/AgentPage";
+import AgentPageDetail from "../dashboard/AgentPageDetail";
 import AgentDashboard from "../dashboard/Agent/AgentDashboard";
 import AddIntern from "../dashboard/Agent/AddIntern";
 import CeoDashboard from "../dashboard/ceo/CeoDashboard";
@@ -206,6 +207,15 @@ export default function AppRoutes() {
             element={
               <RequireRole allowedRoles={["admin", "ceo", "school_owner"]}>
                 <AgentPage />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="agents/:id"
+            element={
+              <RequireRole allowedRoles={["admin", "ceo", "school_owner"]}>
+                <AgentPageDetail />
               </RequireRole>
             }
           />

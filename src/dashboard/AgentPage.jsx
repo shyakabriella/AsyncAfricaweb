@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const API_BASE =
   import.meta.env.VITE_API_URL ||
@@ -22,7 +23,6 @@ function getStoredToken() {
 function extractErrorMessage(error, fallback = "Something went wrong.") {
   if (!error) return fallback;
   if (typeof error === "string") return error;
-
   if (error?.message) return error.message;
 
   if (error?.errors && typeof error.errors === "object") {
@@ -153,14 +153,25 @@ function StatCard({ label, value, subValue, accent = "violet" }) {
   );
 }
 
-function AgentCard({ agent, onEdit, onToggle }) {
+function AgentCard({ agent, onEdit, onToggle, onOpen, disabled }) {
   const isActive = Boolean(agent?.is_active);
   const walletCurrency = agent?.wallet?.currency || "RWF";
   const totalStudents = Number(agent?.stats?.total_students || 0);
   const totalCommission = Number(agent?.stats?.total_commission || 0);
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen(agent)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen(agent);
+        }
+      }}
+      className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-violet-300 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-violet-100"
+    >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-start gap-4">
           <AgentAvatar agent={agent} />
@@ -189,11 +200,27 @@ function AgentCard({ agent, onEdit, onToggle }) {
               <span className="inline-flex items-center rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-700">
                 {Number(agent?.commission_percentage || 0)}% Commission
               </span>
+
+              <span className="inline-flex items-center rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700">
+                Click to open details
+              </span>
             </div>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div
+          className="flex flex-wrap gap-2"
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={() => onOpen(agent)}
+            className="rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100"
+          >
+            View Details
+          </button>
+
           <button
             type="button"
             onClick={() => onEdit(agent)}
@@ -205,8 +232,9 @@ function AgentCard({ agent, onEdit, onToggle }) {
           <button
             type="button"
             onClick={() => onToggle(agent)}
+            disabled={disabled}
             className={[
-              "rounded-2xl px-4 py-2 text-sm font-semibold transition",
+              "rounded-2xl px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
               isActive
                 ? "border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
                 : "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
@@ -260,6 +288,8 @@ const initialForm = {
 };
 
 export default function AgentPage() {
+  const navigate = useNavigate();
+
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -392,6 +422,14 @@ export default function AgentPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  function handleOpen(agent) {
+    if (!agent?.id) return;
+
+    navigate(`/dashboard/agents/${agent.id}`, {
+      state: { agent },
+    });
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
 
@@ -472,7 +510,8 @@ export default function AgentPage() {
               </h1>
               <p className="mt-3 max-w-2xl text-sm text-white/85 sm:text-base">
                 Create agents, update their profile, set commission percentage,
-                and see wallet balance and referral performance in one place.
+                and open each agent card to see registered students and detail
+                performance.
               </p>
             </div>
 
@@ -690,7 +729,7 @@ export default function AgentPage() {
                   All Agents
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Search and manage registered agents.
+                  Click an agent card to open the registered students page.
                 </p>
               </div>
 
@@ -767,6 +806,8 @@ export default function AgentPage() {
                       agent={agent}
                       onEdit={handleEdit}
                       onToggle={handleToggle}
+                      onOpen={handleOpen}
+                      disabled={togglingId === agent.id}
                     />
                   </div>
                 ))}

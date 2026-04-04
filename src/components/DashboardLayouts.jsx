@@ -38,10 +38,17 @@ function getTitle(path, role) {
     path === "/dashboard/ceo" ||
     path === "/dashboard/trainer" ||
     path === "/dashboard/student" ||
-    path === "/dashboard/agent" ||
-    path === "/dashboard/agents"
+    path === "/dashboard/agent"
   ) {
     return getBaseDashboardTitle(normalizedRole);
+  }
+
+  if (path.startsWith("/dashboard/agents/")) {
+    return "Agent Details";
+  }
+
+  if (path === "/dashboard/agents") {
+    return "Agent Management";
   }
 
   if (path.includes("/dashboard/programs")) {
@@ -81,10 +88,6 @@ function getTitle(path, role) {
     return "System Settings";
   }
 
-  if (path.includes("/dashboard/agents")) {
-    return "Agent Management";
-  }
-
   if (path.includes("/dashboard/agent")) {
     return "Agent Dashboard";
   }
@@ -96,7 +99,7 @@ function isAdminAllowedPath(path) {
   return (
     path === "/dashboard" ||
     path === "/dashboard/admin" ||
-    path === "/dashboard/agents" ||
+    path.startsWith("/dashboard/agents") ||
     path.startsWith("/dashboard/programs") ||
     path.startsWith("/dashboard/applications") ||
     path.startsWith("/dashboard/internaship") ||
@@ -121,7 +124,7 @@ function isCeoAllowedPath(path) {
   return (
     path === "/dashboard" ||
     path === "/dashboard/ceo" ||
-    path === "/dashboard/agents"
+    path.startsWith("/dashboard/agents")
   );
 }
 
@@ -144,7 +147,7 @@ function isAgentAllowedPath(path) {
 }
 
 function isSchoolOwnerAllowedPath(path) {
-  return path === "/dashboard" || path === "/dashboard/agents";
+  return path === "/dashboard" || path.startsWith("/dashboard/agents");
 }
 
 function isAllowedPathForRole(path, role) {
