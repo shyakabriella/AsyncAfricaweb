@@ -150,7 +150,6 @@ function normalizeAgentStudentRow(row, index, currency = "RWF") {
     studentPhone: row?.student_phone || "",
     programName: row?.program?.name || "No Program",
     programSlug: row?.program?.slug || "",
-    amountPaid: Number(row?.amount_paid || 0),
     commissionPercentage: Number(row?.commission_percentage || 0),
     commissionAmount: Number(row?.commission_amount || 0),
     currency: row?.currency || currency,
@@ -251,7 +250,6 @@ export default function AgentDashboard() {
   const [rows, setRows] = useState([]);
   const [stats, setStats] = useState({
     total_students: 0,
-    total_amount_paid: 0,
     total_commission: 0,
   });
 
@@ -320,7 +318,6 @@ export default function AgentDashboard() {
 
       setStats({
         total_students: Number(statsData?.total_students || 0),
-        total_amount_paid: Number(statsData?.total_amount_paid || 0),
         total_commission: Number(statsData?.total_commission || 0),
       });
 
@@ -334,8 +331,7 @@ export default function AgentDashboard() {
       setRows([]);
       setStats({
         total_students: 0,
-        total_amount_paid: 0,
-        total_commission: 0,
+            total_commission: 0,
       });
     } finally {
       setLoading(false);
@@ -386,7 +382,6 @@ export default function AgentDashboard() {
     return {
       currentBalance: Number(currentUser.walletBalance || 0),
       totalStudents: Number(stats.total_students || 0),
-      totalAmountPaid: Number(stats.total_amount_paid || 0),
       totalCommission: Number(stats.total_commission || 0),
       thisMonthStudents: thisMonthRows.length,
       thisMonthCommission: thisMonthRows.reduce(
@@ -474,7 +469,7 @@ export default function AgentDashboard() {
 
   const cardStats = [
     {
-      title: "Registered Students",
+      title: "Total Registered Students",
       value: summary.totalStudents,
       note: `${summary.thisMonthStudents} this month`,
       progress:
@@ -485,28 +480,25 @@ export default function AgentDashboard() {
       icon: "👨‍🎓",
     },
     {
-      title: "Total Amount Paid",
-      value: formatCurrency(summary.totalAmountPaid, currentUser.walletCurrency),
-      note: "Paid amount from your registered students",
-      progress:
-        summary.totalAmountPaid > 0
-          ? Math.min(100, Math.round((summary.totalCommission / summary.totalAmountPaid) * 100))
-          : 0,
-      colorClass: "bg-violet-600",
-      icon: "💰",
-    },
-    {
       title: "Total Commission",
       value: formatCurrency(summary.totalCommission, currentUser.walletCurrency),
-      note: `${summary.averageCommission}% average commission`,
+      note: `${summary.thisMonthCommission ? formatCurrency(summary.thisMonthCommission, currentUser.walletCurrency) : formatCurrency(0, currentUser.walletCurrency)} this month`,
       progress: Math.min(100, Math.round(summary.averageCommission)),
       colorClass: "bg-emerald-600",
       icon: "📈",
     },
     {
-      title: "Approved Rate",
-      value: `${summary.conversionRate}%`,
-      note: `${summary.approvedStudents} approved / paid students`,
+      title: "Commission Percentage",
+      value: `${currentUser.commissionPercentage || 0}%`,
+      note: "Default commission set by admin",
+      progress: Math.min(100, Math.round(currentUser.commissionPercentage || 0)),
+      colorClass: "bg-violet-600",
+      icon: "💰",
+    },
+    {
+      title: "Approved Students",
+      value: summary.approvedStudents,
+      note: `${summary.pendingStudents} pending students`,
       progress: Math.min(100, summary.conversionRate),
       colorClass: "bg-amber-500",
       icon: "✅",
@@ -534,7 +526,7 @@ export default function AgentDashboard() {
               </h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-white/85 md:text-base">
                 This dashboard now shows real agent information from your system:
-                your students, payments, commissions, wallet balance, and recent
+                your students, commissions, wallet balance, and recent
                 registration activity.
               </p>
 
@@ -729,9 +721,9 @@ export default function AgentDashboard() {
                 Performance Note
               </p>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Approved students and paid amounts now come from the actual agent
+                Approved students and commission totals now come from the actual agent
                 referral records, so this section changes automatically whenever
-                new students are registered or their payment status changes.
+                new students are registered or their status changes.
               </p>
             </div>
           </div>
@@ -798,7 +790,6 @@ export default function AgentDashboard() {
                   <tr className="text-xs uppercase tracking-[0.14em] text-slate-500">
                     <th className="px-4 py-3 font-semibold">Student</th>
                     <th className="px-4 py-3 font-semibold">Program</th>
-                    <th className="px-4 py-3 font-semibold">Amount Paid</th>
                     <th className="px-4 py-3 font-semibold">Commission</th>
                     <th className="px-4 py-3 font-semibold">Status</th>
                     <th className="px-4 py-3 font-semibold">Registered</th>
@@ -809,7 +800,7 @@ export default function AgentDashboard() {
                   {loading ? (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={5}
                         className="px-4 py-8 text-center text-sm text-slate-500"
                       >
                         Loading dashboard data...
@@ -818,7 +809,7 @@ export default function AgentDashboard() {
                   ) : recentStudents.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={5}
                         className="px-4 py-8 text-center text-sm text-slate-500"
                       >
                         No students registered under this agent yet.
@@ -843,10 +834,6 @@ export default function AgentDashboard() {
                           <div className="mt-1 text-xs text-slate-500">
                             {student.programSlug || "-"}
                           </div>
-                        </td>
-
-                        <td className="px-4 py-4 text-sm font-semibold text-slate-700">
-                          {formatCurrency(student.amountPaid, student.currency)}
                         </td>
 
                         <td className="px-4 py-4 text-sm font-semibold text-indigo-700">
