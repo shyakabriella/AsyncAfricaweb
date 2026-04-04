@@ -7,8 +7,13 @@ const API_BASE = (
   "http://127.0.0.1:8000/api"
 ).replace(/\/$/, "");
 
+const AGENT_DASHBOARD_ENDPOINT = "/agents/me/dashboard";
+const AGENT_REGISTER_STUDENT_ENDPOINT = "/agents/register-student";
+const PROGRAM_OPTIONS_ENDPOINT = "/users-program-options";
+
 function getStoredToken() {
   if (typeof window === "undefined") return "";
+
   for (const key of TOKEN_KEYS) {
     const localValue = localStorage.getItem(key);
     if (localValue) return localValue;
@@ -16,6 +21,7 @@ function getStoredToken() {
     const sessionValue = sessionStorage.getItem(key);
     if (sessionValue) return sessionValue;
   }
+
   return "";
 }
 
@@ -29,12 +35,25 @@ function getAuthHeaders() {
   };
 }
 
-function normalizeUsers(payload) {
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.data)) return payload.data;
-  if (Array.isArray(payload?.users)) return payload.users;
-  if (Array.isArray(payload?.data?.users)) return payload.data.users;
-  return [];
+async function apiRequest(endpoint, options = {}) {
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    headers: getAuthHeaders(),
+    ...options,
+  });
+
+  const result = await response.json().catch(() => ({}));
+
+  if (!response.ok || result?.success === false) {
+    const serverErrors = result?.data || result?.errors;
+    const firstError =
+      typeof serverErrors === "object" && serverErrors
+        ? Object.values(serverErrors)?.flat?.()?.[0]
+        : null;
+
+    throw new Error(firstError || result?.message || "Request failed.");
+  }
+
+  return result;
 }
 
 function normalizePrograms(payload) {
@@ -45,15 +64,92 @@ function normalizePrograms(payload) {
   return [];
 }
 
+function formatCurrency(amount, currency = "RWF") {
+  return new Intl.NumberFormat("en-RW", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0,
+  }).format(Number(amount || 0));
+}
+
+function formatDate(dateValue) {
+  if (!dateValue) return "-";
+
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return dateValue;
+
+  return date.toLocaleDateString("en-GB", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function getStatusBadgeClass(status) {
+  const value = String(status || "").toLowerCase();
+
+  if (["active", "approved", "paid"].includes(value)) {
+    return "bg-emerald-100 text-emerald-700";
+  }
+
+  if (["pending"].includes(value)) {
+    return "bg-amber-100 text-amber-700";
+  }
+
+  if (["inactive", "rejected", "suspended"].includes(value)) {
+    return "bg-rose-100 text-rose-700";
+  }
+
+  return "bg-slate-100 text-slate-700";
+}
+
+function normalizeStudentRow(row, index) {
+  return {
+    id: row?.referral_id || index + 1,
+    studentId: row?.student_id || "",
+    studentName: row?.student_name || "Student",
+    studentEmail: row?.student_email || "",
+    studentPhone: row?.student_phone || "",
+    programName: row?.program?.name || "No Program",
+    programSlug: row?.program?.slug || "",
+    programPrice: Number(
+      row?.program?.price ?? row?.program_price ?? row?.amount_paid ?? 0
+    ),
+    amountPaid: Number(row?.amount_paid || 0),
+    commissionPercentage: Number(row?.commission_percentage || 0),
+    commissionAmount: Number(row?.commission_amount || 0),
+    currency: row?.currency || "RWF",
+    status: row?.status || "pending",
+    registeredAt: row?.registered_at || row?.created_at || null,
+  };
+}
+
+function SummaryCard({ label, value, note }) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-sm font-medium text-slate-500">{label}</p>
+      <h3 className="mt-2 text-2xl font-bold text-slate-900">{value}</h3>
+      {note ? <p className="mt-2 text-sm text-slate-600">{note}</p> : null}
+    </div>
+  );
+}
+
 export default function Addintern() {
   const [students, setStudents] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingPrograms, setLoadingPrograms] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [search, setSearch] = useState("");
   const [feedback, setFeedback] = useState("");
   const [error, setError] = useState("");
+  const [agentCommission, setAgentCommission] = useState(0);
+  const [stats, setStats] = useState({
+    total_students: 0,
+    total_amount_paid: 0,
+    total_commission: 0,
+  });
 
   const [form, setForm] = useState({
     name: "",
@@ -61,47 +157,14 @@ export default function Addintern() {
     phone: "",
     status: "active",
     program_id: "",
+    notes: "",
   });
-
-  const loadStudents = async () => {
-    setLoading(true);
-    setError("");
-
-    try {
-      const res = await fetch(`${API_BASE}/users?role=student`, {
-        method: "GET",
-        headers: getAuthHeaders(),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok || data?.success === false) {
-        throw new Error(data?.message || "Failed to load student accounts.");
-      }
-
-      setStudents(normalizeUsers(data));
-    } catch (err) {
-      setError(err.message || "Failed to load student accounts.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const loadPrograms = async () => {
     setLoadingPrograms(true);
 
     try {
-      const res = await fetch(`${API_BASE}/users-program-options`, {
-        method: "GET",
-        headers: getAuthHeaders(),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok || data?.success === false) {
-        throw new Error(data?.message || "Failed to load programs.");
-      }
-
+      const data = await apiRequest(PROGRAM_OPTIONS_ENDPOINT);
       setPrograms(normalizePrograms(data));
     } catch (err) {
       setError(err.message || "Failed to load programs.");
@@ -110,9 +173,45 @@ export default function Addintern() {
     }
   };
 
+  const loadStudents = async (isRefresh = false) => {
+    try {
+      setError("");
+
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
+      const data = await apiRequest(AGENT_DASHBOARD_ENDPOINT);
+      const payload = data?.data || {};
+      const rows = Array.isArray(payload?.students) ? payload.students : [];
+
+      setStudents(rows.map((row, index) => normalizeStudentRow(row, index)));
+      setStats({
+        total_students: Number(payload?.stats?.total_students || 0),
+        total_amount_paid: Number(payload?.stats?.total_amount_paid || 0),
+        total_commission: Number(payload?.stats?.total_commission || 0),
+      });
+      setAgentCommission(
+        Number(payload?.agent?.profile?.commission_percentage || 0)
+      );
+    } catch (err) {
+      setError(err.message || "Failed to load students.");
+      setStudents([]);
+      setStats({
+        total_students: 0,
+        total_amount_paid: 0,
+        total_commission: 0,
+      });
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
   useEffect(() => {
-    loadStudents();
-    loadPrograms();
+    Promise.all([loadStudents(false), loadPrograms()]);
   }, []);
 
   const filteredStudents = useMemo(() => {
@@ -121,12 +220,24 @@ export default function Addintern() {
 
     return students.filter((student) => {
       return (
-        String(student?.name || "").toLowerCase().includes(keyword) ||
-        String(student?.email || "").toLowerCase().includes(keyword) ||
-        String(student?.phone || "").toLowerCase().includes(keyword)
+        String(student?.studentName || "").toLowerCase().includes(keyword) ||
+        String(student?.studentEmail || "").toLowerCase().includes(keyword) ||
+        String(student?.studentPhone || "").toLowerCase().includes(keyword) ||
+        String(student?.programName || "").toLowerCase().includes(keyword)
       );
     });
   }, [students, search]);
+
+  const selectedProgram = useMemo(() => {
+    return programs.find(
+      (program) => String(program.id) === String(form.program_id)
+    );
+  }, [programs, form.program_id]);
+
+  const expectedCommission = useMemo(() => {
+    const programPrice = Number(selectedProgram?.price || 0);
+    return Math.round(((programPrice * agentCommission) / 100) * 100) / 100;
+  }, [selectedProgram, agentCommission]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -140,6 +251,7 @@ export default function Addintern() {
       phone: "",
       status: "active",
       program_id: "",
+      notes: "",
     });
   };
 
@@ -152,41 +264,32 @@ export default function Addintern() {
     try {
       const payload = {
         name: form.name.trim(),
-        email: form.email.trim(),
-        phone: form.phone.trim(),
+        email: form.email.trim() || null,
+        phone: form.phone.trim() || null,
         status: form.status,
         is_active: form.status === "active",
-        role_slug: "student",
-        program_ids: form.program_id ? [Number(form.program_id)] : [],
+        program_id: Number(form.program_id),
+        notes: form.notes.trim() || null,
       };
 
-      const res = await fetch(`${API_BASE}/users`, {
+      const data = await apiRequest(AGENT_REGISTER_STUDENT_ENDPOINT, {
         method: "POST",
-        headers: getAuthHeaders(),
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
-
-      if (!res.ok || data?.success === false) {
-        const serverErrors = data?.data || data?.errors;
-        const firstError =
-          typeof serverErrors === "object" && serverErrors
-            ? Object.values(serverErrors)?.flat?.()?.[0]
-            : null;
-
-        throw new Error(
-          firstError || data?.message || "Failed to create student account."
-        );
-      }
+      const createdReferral = data?.data?.referral || {};
+      const createdProgram = createdReferral?.program || {};
+      const commissionValue = Number(createdReferral?.commission_amount || 0);
+      const currency = createdReferral?.currency || "RWF";
 
       setFeedback(
-        data?.data?.email_setup_message ||
-          "Student account created successfully."
+        `Student created under this agent successfully. Program: ${
+          createdProgram?.name || "Selected Program"
+        }. Commission added: ${formatCurrency(commissionValue, currency)}.`
       );
 
       resetForm();
-      await loadStudents();
+      await loadStudents(true);
     } catch (err) {
       setError(err.message || "Failed to create student account.");
     } finally {
@@ -200,19 +303,43 @@ export default function Addintern() {
         <p className="text-sm font-medium text-white/80">Agent Workspace</p>
         <h1 className="mt-2 text-2xl font-bold md:text-3xl">Add Intern</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-white/85">
-          This page creates and manages student accounts. It uses your user
-          controller student endpoints, so all records shown here are student
-          accounts.
+          This page now works only with the logged-in agent. The agent sees only
+          students registered under him, together with the program, program
+          price, commission percentage, and commission earned.
         </p>
       </section>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <SummaryCard
+          label="My Students"
+          value={stats.total_students}
+          note="Only students registered under this agent"
+        />
+        <SummaryCard
+          label="Total Program Amount"
+          value={formatCurrency(stats.total_amount_paid, "RWF")}
+          note="Total amount used for commission calculation"
+        />
+        <SummaryCard
+          label="Total Commission"
+          value={formatCurrency(stats.total_commission, "RWF")}
+          note="Wallet amount earned from agent referrals"
+        />
+        <SummaryCard
+          label="Default Commission"
+          value={`${agentCommission}%`}
+          note="Commission percentage set by admin"
+        />
+      </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm xl:col-span-1">
           <h2 className="text-lg font-bold text-slate-900">
-            Create Student Account
+            Register Student Under Agent
           </h2>
           <p className="mt-2 text-sm text-slate-600">
-            Fill in the student details below.
+            When you select a program, the system uses that program price to
+            calculate agent commission automatically.
           </p>
 
           {feedback ? (
@@ -252,7 +379,6 @@ export default function Addintern() {
                 name="email"
                 value={form.email}
                 onChange={handleChange}
-                required
                 className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-indigo-500"
                 placeholder="Enter student email"
               />
@@ -296,6 +422,34 @@ export default function Addintern() {
               </select>
             </div>
 
+            <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
+              <p className="text-sm font-semibold text-indigo-900">
+                Program Price
+              </p>
+              <p className="mt-1 text-lg font-bold text-indigo-700">
+                {formatCurrency(Number(selectedProgram?.price || 0), "RWF")}
+              </p>
+
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
+                    Agent %
+                  </p>
+                  <p className="mt-1 text-sm font-bold text-slate-900">
+                    {agentCommission}%
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
+                    Expected Commission
+                  </p>
+                  <p className="mt-1 text-sm font-bold text-slate-900">
+                    {formatCurrency(expectedCommission, "RWF")}
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <div>
               <label className="mb-2 block text-sm font-semibold text-slate-700">
                 Status
@@ -312,6 +466,20 @@ export default function Addintern() {
               </select>
             </div>
 
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-slate-700">
+                Notes
+              </label>
+              <textarea
+                name="notes"
+                value={form.notes}
+                onChange={handleChange}
+                rows={3}
+                className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-indigo-500"
+                placeholder="Optional notes"
+              />
+            </div>
+
             <button
               type="submit"
               disabled={submitting || loadingPrograms}
@@ -326,27 +494,27 @@ export default function Addintern() {
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 className="text-lg font-bold text-slate-900">
-                Student Accounts
+                Students Registered Under This Agent
               </h2>
               <p className="mt-1 text-sm text-slate-600">
-                View all students from the student account list.
+                This list shows only referrals created by the logged-in agent.
               </p>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row">
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search student..."
+                placeholder="Search student or program..."
                 className="w-full min-w-[220px] rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-indigo-500"
               />
               <button
                 type="button"
-                onClick={loadStudents}
+                onClick={() => loadStudents(true)}
                 className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
               >
-                Refresh
+                {refreshing ? "Refreshing..." : "Refresh"}
               </button>
             </div>
           </div>
@@ -357,19 +525,25 @@ export default function Addintern() {
                 <thead className="bg-slate-50">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Name
+                      Student
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Email
+                      Program
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Phone
+                      Program Fee
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Commission %
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Commission
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
                       Status
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Active
+                      Registered
                     </th>
                   </tr>
                 </thead>
@@ -378,49 +552,64 @@ export default function Addintern() {
                   {loading ? (
                     <tr>
                       <td
-                        colSpan={5}
+                        colSpan={7}
                         className="px-4 py-8 text-center text-sm text-slate-500"
                       >
-                        Loading student accounts...
+                        Loading students...
                       </td>
                     </tr>
                   ) : filteredStudents.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={5}
+                        colSpan={7}
                         className="px-4 py-8 text-center text-sm text-slate-500"
                       >
-                        No student accounts found.
+                        No students registered under this agent yet.
                       </td>
                     </tr>
                   ) : (
                     filteredStudents.map((student) => (
                       <tr key={student.id}>
+                        <td className="px-4 py-4 text-sm text-slate-700">
+                          <div className="font-semibold text-slate-900">
+                            {student.studentName}
+                          </div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            {student.studentEmail || student.studentPhone || "-"}
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 text-sm text-slate-700">
+                          <div className="font-medium text-slate-900">
+                            {student.programName}
+                          </div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            {student.programSlug || "-"}
+                          </div>
+                        </td>
                         <td className="px-4 py-4 text-sm font-semibold text-slate-900">
-                          {student.name || "-"}
+                          {formatCurrency(student.programPrice, student.currency)}
                         </td>
-                        <td className="px-4 py-4 text-sm text-slate-600">
-                          {student.email || "-"}
+                        <td className="px-4 py-4 text-sm font-semibold text-slate-900">
+                          {student.commissionPercentage}%
                         </td>
-                        <td className="px-4 py-4 text-sm text-slate-600">
-                          {student.phone || "-"}
+                        <td className="px-4 py-4 text-sm font-semibold text-indigo-700">
+                          {formatCurrency(
+                            student.commissionAmount,
+                            student.currency
+                          )}
                         </td>
-                        <td className="px-4 py-4 text-sm text-slate-600">
-                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                            {student.status || "-"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4 text-sm">
+                        <td className="px-4 py-4 text-sm text-slate-700">
                           <span
                             className={[
                               "rounded-full px-3 py-1 text-xs font-semibold",
-                              student.is_active
-                                ? "bg-emerald-100 text-emerald-700"
-                                : "bg-rose-100 text-rose-700",
+                              getStatusBadgeClass(student.status),
                             ].join(" ")}
                           >
-                            {student.is_active ? "Yes" : "No"}
+                            {student.status}
                           </span>
+                        </td>
+                        <td className="px-4 py-4 text-sm text-slate-600">
+                          {formatDate(student.registeredAt)}
                         </td>
                       </tr>
                     ))

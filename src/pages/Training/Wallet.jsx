@@ -53,7 +53,7 @@ async function apiRequest(endpoint) {
 
   const result = await response.json().catch(() => ({}));
 
-  if (!response.ok) {
+  if (!response.ok || result?.success === false) {
     throw new Error(result?.message || "Request failed.");
   }
 
@@ -84,11 +84,7 @@ function formatDate(dateValue) {
 function getStatusBadgeClass(status) {
   const value = String(status || "").toLowerCase();
 
-  if (
-    value === "active" ||
-    value === "approved" ||
-    value === "paid"
-  ) {
+  if (["active", "approved", "paid"].includes(value)) {
     return "bg-emerald-500/15 text-emerald-300 border border-emerald-500/20";
   }
 
@@ -96,11 +92,7 @@ function getStatusBadgeClass(status) {
     return "bg-amber-500/15 text-amber-300 border border-amber-500/20";
   }
 
-  if (
-    value === "inactive" ||
-    value === "rejected" ||
-    value === "suspended"
-  ) {
+  if (["inactive", "rejected", "suspended"].includes(value)) {
     return "bg-rose-500/15 text-rose-300 border border-rose-500/20";
   }
 
@@ -151,6 +143,9 @@ function normalizeAgentStudentRow(row, index, currency = "RWF") {
     studentPhone: row?.student_phone || "",
     programName: row?.program?.name || "No Program",
     programSlug: row?.program?.slug || "",
+    programPrice: Number(
+      row?.program?.price ?? row?.program_price ?? row?.amount_paid ?? 0
+    ),
     amountPaid: Number(row?.amount_paid || 0),
     commissionPercentage: Number(row?.commission_percentage || 0),
     commissionAmount: Number(row?.commission_amount || 0),
@@ -231,10 +226,7 @@ export default function Wallet() {
       const students = Array.isArray(data?.students) ? data.students : [];
 
       const walletBalance = Number(
-        wallet?.balance ??
-          agentWallet?.balance ??
-          meData.walletBalance ??
-          0
+        wallet?.balance ?? agentWallet?.balance ?? meData.walletBalance ?? 0
       );
 
       const walletCurrency =
@@ -255,10 +247,7 @@ export default function Wallet() {
           0
       );
 
-      const role =
-        data?.agent?.role?.slug ||
-        meData.role ||
-        "agent";
+      const role = data?.agent?.role?.slug || meData.role || "agent";
 
       setCurrentUser((prev) => ({
         ...prev,
@@ -361,9 +350,9 @@ export default function Wallet() {
                 Welcome, {currentUser?.name || "Agent"}
               </h1>
               <p className="mt-2 max-w-2xl text-sm text-white/65">
-                This page shows students registered by this agent, their paid
-                amount, the allowed commission percentage, and the total
-                commission earned from referrals.
+                This page now reads only the logged-in agent referrals and
+                calculates wallet balance from program price and the commission
+                percentage set by admin.
               </p>
             </div>
 
@@ -403,9 +392,9 @@ export default function Wallet() {
           />
 
           <StatCard
-            title="Total Amount Paid"
+            title="Total Program Amount"
             value={formatCurrency(summary.totalAmountPaid, currency)}
-            note="All student payments linked to this agent"
+            note="Program amount used to calculate commission"
           />
 
           <StatCard
@@ -435,12 +424,12 @@ export default function Wallet() {
           <StatCard
             title="Approved Students"
             value={summary.successfulStudents}
-            note="Referrals already approved/paid"
+            note="Referrals already approved or paid"
           />
           <StatCard
             title="Pending Students"
             value={summary.pendingStudents}
-            note="Referrals still waiting for approval"
+            note="Referrals still waiting"
           />
         </div>
 
@@ -450,9 +439,8 @@ export default function Wallet() {
               Agent Commission Summary
             </h2>
             <p className="mt-2 text-sm leading-6 text-white/65">
-              Each student registered by the agent contributes commission based
-              on the amount paid and the commission percentage assigned to the
-              agent.
+              Wallet balance is recalculated from all referrals using program
+              price and the current commission percentage set for the agent.
             </p>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -520,7 +508,7 @@ export default function Wallet() {
               Students Registered by Agent
             </h2>
             <p className="mt-1 text-sm text-white/65">
-              This table shows each student, payment amount, allowed commission
+              This table shows the selected program, program fee, commission
               percentage, commission earned, and current referral status.
             </p>
           </div>
@@ -540,7 +528,7 @@ export default function Wallet() {
                   <tr className="text-xs uppercase tracking-[0.14em] text-[#A7A9BE]">
                     <th className="px-5 py-4 font-semibold">Student</th>
                     <th className="px-5 py-4 font-semibold">Program</th>
-                    <th className="px-5 py-4 font-semibold">Amount Paid</th>
+                    <th className="px-5 py-4 font-semibold">Program Fee</th>
                     <th className="px-5 py-4 font-semibold">Commission %</th>
                     <th className="px-5 py-4 font-semibold">Commission</th>
                     <th className="px-5 py-4 font-semibold">Status</th>
@@ -573,7 +561,7 @@ export default function Wallet() {
                       </td>
 
                       <td className="px-5 py-4 align-top font-semibold text-white">
-                        {formatCurrency(row.amountPaid, row.currency)}
+                        {formatCurrency(row.programPrice, row.currency)}
                       </td>
 
                       <td className="px-5 py-4 align-top font-semibold text-white">
