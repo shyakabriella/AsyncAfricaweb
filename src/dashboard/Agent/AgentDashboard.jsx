@@ -8,7 +8,7 @@ const API_BASE =
   ).replace(/\/$/, "");
 
 const AGENT_DASHBOARD_ENDPOINT = "/agents/me/dashboard";
-const SUCCESS_REFERRAL_STATUSES = ["approved", "paid", "active"];
+const SUCCESS_REFERRAL_STATUSES = ["paid"];
 
 function parseStoredUser(value) {
   try {
@@ -106,7 +106,7 @@ function formatRoleLabel(role) {
 function getStatusBadgeClass(status) {
   const value = String(status || "").toLowerCase();
 
-  if (value === "active" || value === "approved" || value === "paid") {
+  if (value === "paid") {
     return "bg-emerald-100 text-emerald-700 border border-emerald-200";
   }
 
@@ -372,7 +372,7 @@ export default function AgentDashboard() {
           ) / rows.length
         : Number(currentUser.commissionPercentage || 0);
 
-    const conversionRate =
+    const paidRate =
       Number(stats.total_students || 0) > 0
         ? (successfulRows.length / Number(stats.total_students || 1)) * 100
         : 0;
@@ -386,10 +386,10 @@ export default function AgentDashboard() {
         (sum, item) => sum + Number(item.commissionAmount || 0),
         0
       ),
-      approvedStudents: successfulRows.length,
-      pendingStudents: pendingRows.length,
+      paidStudents: Number(stats.paid_students || successfulRows.length),
+      notPaidStudents: Number(stats.not_paid_students || pendingRows.length),
       averageCommission: Math.round(averageCommission * 100) / 100,
-      conversionRate: Math.round(conversionRate),
+      paidRate: Math.round(paidRate),
     };
   }, [rows, stats, currentUser.walletBalance, currentUser.commissionPercentage]);
 
@@ -494,10 +494,10 @@ export default function AgentDashboard() {
       icon: "💰",
     },
     {
-      title: "Approved Students",
-      value: summary.approvedStudents,
-      note: `${summary.pendingStudents} not paid students`,
-      progress: Math.min(100, summary.conversionRate),
+      title: "Paid Students",
+      value: summary.paidStudents,
+      note: `${summary.notPaidStudents} not paid students`,
+      progress: Math.min(100, summary.paidRate),
       colorClass: "bg-amber-500",
       icon: "✅",
     },
@@ -676,19 +676,19 @@ export default function AgentDashboard() {
             <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="rounded-2xl bg-indigo-50 p-5">
                 <p className="text-sm font-medium text-slate-600">
-                  Approved / Paid Students
+                  Paid Students
                 </p>
                 <div className="mt-2 text-3xl font-bold text-indigo-700">
-                  {summary.approvedStudents}
+                  {summary.paidStudents}
                 </div>
               </div>
 
               <div className="rounded-2xl bg-amber-50 p-5">
                 <p className="text-sm font-medium text-slate-600">
-                  Pending Students
+                  Not Paid Students
                 </p>
                 <div className="mt-2 text-3xl font-bold text-amber-700">
-                  {summary.pendingStudents}
+                  {summary.notPaidStudents}
                 </div>
               </div>
 
@@ -719,7 +719,7 @@ export default function AgentDashboard() {
                 Performance Note
               </p>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Approved students and commission totals now come from the actual agent
+                Paid students and commission totals now come from the actual agent
                 referral records, so this section changes automatically whenever
                 new students are registered or their status changes.
               </p>

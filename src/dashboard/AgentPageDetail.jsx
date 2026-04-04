@@ -9,7 +9,7 @@ const API_BASE = (
 ).replace(/\/$/, "");
 
 const TOKEN_KEYS = ["token", "auth_token", "access_token"];
-const SUCCESS_REFERRAL_STATUSES = ["approved", "paid", "active"];
+const SUCCESS_REFERRAL_STATUSES = ["paid"];
 const ACTION_OPTIONS = [
   { value: "not_paid", label: "Not Paid" },
   { value: "paid", label: "Paid" },
@@ -57,7 +57,7 @@ async function apiRequest(endpoint, options = {}) {
   const result = await response.json().catch(() => ({}));
 
   if (!response.ok || result?.success === false) {
-    throw new Error(result?.message || "Request failed.");
+    throw new Error(result?.error || result?.message || "Request failed.");
   }
 
   return result;
@@ -106,10 +106,9 @@ function formatStatusLabel(status) {
   const value = String(status || '').toLowerCase();
 
   if (value === 'not_paid') return 'Not Paid';
-  if (value === 'paid') return 'Paid';
-  if (value === 'quit') return 'Quit';
-  if (value === 'approved') return 'Approved';
-  if (value === 'pending') return 'Pending';
+  if (value === 'paid' || value === 'approved') return 'Paid';
+  if (value === 'quit' || value === 'rejected') return 'Quit';
+  if (value === 'not_paid' || value === 'pending') return 'Not Paid';
 
   return String(status || 'Not Paid')
     .replace(/_/g, ' ')
@@ -193,8 +192,8 @@ export default function AgentPageDetail() {
   const [agent, setAgent] = useState(normalizeAgent());
   const [stats, setStats] = useState({
     total_students: 0,
-    approved_students: 0,
-    pending_students: 0,
+    paid_students: 0,
+    not_paid_students: 0,
     total_amount_paid: 0,
     total_commission: 0,
     expected_commission: 0,
@@ -228,8 +227,8 @@ export default function AgentPageDetail() {
       setAgent(normalizedAgent);
       setStats({
         total_students: Number(detailStats?.total_students || 0),
-        approved_students: Number(detailStats?.approved_students || 0),
-        pending_students: Number(detailStats?.pending_students || 0),
+        paid_students: Number(detailStats?.paid_students || detailStats?.approved_students || 0),
+        not_paid_students: Number(detailStats?.not_paid_students || detailStats?.pending_students || 0),
         total_amount_paid: Number(detailStats?.total_amount_paid || 0),
         total_commission: Number(detailStats?.total_commission || 0),
         expected_commission: Number(detailStats?.expected_commission || 0),
@@ -296,7 +295,7 @@ export default function AgentPageDetail() {
     });
   }, [rows, search]);
 
-  const approvedCount = useMemo(() => {
+  const paidCount = useMemo(() => {
     return rows.filter((row) =>
       SUCCESS_REFERRAL_STATUSES.includes(String(row?.status || "").toLowerCase())
     ).length;
@@ -385,18 +384,18 @@ export default function AgentPageDetail() {
         />
         <SummaryCard
           label="Not Paid Students"
-          value={stats.pending_students}
-          note="Waiting for payment/admin action"
+          value={stats.not_paid_students}
+          note="Default status after agent registration"
         />
         <SummaryCard
-          label="Approved Students"
-          value={stats.approved_students || approvedCount}
-          note="Paid / approved students"
+          label="Paid Students"
+          value={stats.paid_students || paidCount}
+          note="Students marked as paid"
         />
         <SummaryCard
           label="Total Commission"
           value={formatCurrency(stats.total_commission, agent.walletCurrency)}
-          note={`Expected not paid: ${formatCurrency(
+          note={`Expected commission: ${formatCurrency(
             stats.expected_commission,
             agent.walletCurrency
           )}`}
@@ -482,7 +481,7 @@ export default function AgentPageDetail() {
                       <td className="px-4 py-4 align-top">
                         <div className="font-medium text-slate-900">{row.programName}</div>
                         <div className="mt-1 text-sm text-slate-500">
-                          Amount paid: {formatCurrency(row.amountPaid, row.currency)}
+                          Amount: {formatCurrency(row.amountPaid, row.currency)}
                         </div>
                       </td>
                       <td className="px-4 py-4 align-top">

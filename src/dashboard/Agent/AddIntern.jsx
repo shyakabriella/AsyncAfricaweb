@@ -278,7 +278,7 @@ export default function Addintern() {
       setFeedback(
         `Student created successfully. Program: ${
           createdProgram?.name || "Selected Program"
-        }. Current status: ${referralStatus}. This student starts as not paid until admin changes it to Paid or Quit.`
+        }. Current status: ${String(referralStatus).replace(/_/g, " ")}. This student starts as not paid until admin changes it to Paid or Quit.`
       );
 
       resetForm();
