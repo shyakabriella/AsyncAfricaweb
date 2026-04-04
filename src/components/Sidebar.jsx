@@ -386,36 +386,48 @@ export default function Sidebar({ open = true, onClose = () => {} }) {
                       icon={<IconProgram />}
                       onClick={handleMobileClose}
                     />
+
+                    {/*
                     <Item
                       to="/dashboard/training-programs"
                       label="Training Programs"
                       icon={<IconTraining />}
                       onClick={handleMobileClose}
                     />
+                    */}
+
                     <Item
                       to="/dashboard/applications"
                       label="Applications"
                       icon={<IconApplication />}
                       onClick={handleMobileClose}
                     />
+
+                    {/*
                     <Item
                       to="/dashboard/homepage"
                       label="Homepage"
                       icon={<IconHomepage />}
                       onClick={handleMobileClose}
                     />
+                    */}
+
                     <Item
                       to="/dashboard/internaship"
                       label="Internship"
                       icon={<IconInternship />}
                       onClick={handleMobileClose}
                     />
+
+                    {/*
                     <Item
                       to="/dashboard/reports"
                       label="Reports"
                       icon={<IconReport />}
                       onClick={handleMobileClose}
                     />
+                    */}
+
                     <Item
                       to="/dashboard/settings"
                       label="Settings"
@@ -433,18 +445,24 @@ export default function Sidebar({ open = true, onClose = () => {} }) {
                       icon={<IconAgent />}
                       onClick={handleMobileClose}
                     />
+
+                    {/*
                     <Item
                       to="/dashboard/reports"
                       label="Reports"
                       icon={<IconReport />}
                       onClick={handleMobileClose}
                     />
+                    */}
+
+                    {/*
                     <Item
                       to="/dashboard/homepage"
                       label="Homepage"
                       icon={<IconHomepage />}
                       onClick={handleMobileClose}
                     />
+                    */}
                   </>
                 )}
               </>
