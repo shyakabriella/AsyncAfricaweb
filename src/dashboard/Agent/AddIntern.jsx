@@ -92,11 +92,11 @@ function getStatusBadgeClass(status) {
     return "bg-emerald-100 text-emerald-700";
   }
 
-  if (["pending", "reviewed", "waitlisted"].includes(value)) {
+  if (["pending", "reviewed", "waitlisted", "not_paid"].includes(value)) {
     return "bg-amber-100 text-amber-700";
   }
 
-  if (["inactive", "rejected", "suspended"].includes(value)) {
+  if (["inactive", "rejected", "suspended", "quit"].includes(value)) {
     return "bg-rose-100 text-rose-700";
   }
 
@@ -118,7 +118,7 @@ function normalizeStudentRow(row, index) {
     commissionPercentage: Number(row?.commission_percentage || 0),
     commissionAmount: Number(row?.commission_amount || 0),
     currency: row?.currency || "RWF",
-    status: row?.status || "pending",
+    status: row?.status || "not_paid",
     registeredAt: row?.registered_at || row?.created_at || null,
   };
 }
@@ -260,7 +260,7 @@ export default function Addintern() {
         name: form.name.trim(),
         email: form.email.trim() || null,
         phone: form.phone.trim() || null,
-        status: "pending",
+        status: "not_paid",
         is_active: false,
         program_id: Number(form.program_id),
         notes: form.notes.trim() || null,
@@ -273,12 +273,12 @@ export default function Addintern() {
 
       const createdReferral = data?.data?.referral || {};
       const createdProgram = createdReferral?.program || {};
-      const referralStatus = String(createdReferral?.status || "pending");
+      const referralStatus = String(createdReferral?.status || "not_paid");
 
       setFeedback(
         `Student created successfully. Program: ${
           createdProgram?.name || "Selected Program"
-        }. Current status: ${referralStatus}. This student will stay pending until admin approves.`
+        }. Current status: ${referralStatus}. This student starts as not paid until admin changes it to Paid or Quit.`
       );
 
       resetForm();
@@ -297,7 +297,7 @@ export default function Addintern() {
         <h1 className="mt-2 text-2xl font-bold md:text-3xl">Add Intern</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-white/85">
           This page now works only with the logged-in agent. New students added
-          by agent are saved with pending status first, and admin must approve
+          by agent are saved with not paid status first, and admin controls Paid or Quit
           them before they are treated as approved.
         </p>
       </section>
@@ -327,12 +327,12 @@ export default function Addintern() {
           </h2>
           <p className="mt-2 text-sm text-slate-600">
             When you select a program, the system calculates expected commission.
-            But the student will remain pending until admin approval.
+            But the student will remain not paid until admin marks it as Paid or Quit.
           </p>
 
           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             Agent cannot approve student from this page. Every new student is
-            submitted as <span className="font-semibold">pending</span> and
+            submitted as <span className="font-semibold">not paid</span> and
             waits for admin approval.
           </div>
 
@@ -487,7 +487,7 @@ export default function Addintern() {
                 Students Registered Under This Agent
               </h2>
               <p className="mt-1 text-sm text-slate-600">
-                New students from agent should appear here with pending status
+                New students from agent should appear here with not paid status
                 until admin approves them.
               </p>
             </div>

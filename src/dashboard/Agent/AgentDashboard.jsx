@@ -110,11 +110,11 @@ function getStatusBadgeClass(status) {
     return "bg-emerald-100 text-emerald-700 border border-emerald-200";
   }
 
-  if (value === "pending") {
+  if (value === "pending" || value === "not_paid") {
     return "bg-amber-100 text-amber-700 border border-amber-200";
   }
 
-  if (value === "inactive" || value === "rejected" || value === "suspended") {
+  if (value === "inactive" || value === "rejected" || value === "suspended" || value === "quit") {
     return "bg-rose-100 text-rose-700 border border-rose-200";
   }
 
@@ -153,7 +153,7 @@ function normalizeAgentStudentRow(row, index, currency = "RWF") {
     commissionPercentage: Number(row?.commission_percentage || 0),
     commissionAmount: Number(row?.commission_amount || 0),
     currency: row?.currency || currency,
-    status: row?.status || "pending",
+    status: row?.status || "not_paid",
     registeredAt: row?.registered_at || null,
     createdAt: row?.created_at || null,
   };
@@ -348,9 +348,7 @@ export default function AgentDashboard() {
       isSuccessfulReferralStatus(item.status)
     );
 
-    const pendingRows = rows.filter(
-      (item) => String(item.status || "").toLowerCase() === "pending"
-    );
+    const pendingRows = rows.filter((item) => ["pending", "not_paid"].includes(String(item.status || "").toLowerCase()));
 
     const thisMonth = new Date();
     const thisMonthRows = rows.filter((item) => {
@@ -498,7 +496,7 @@ export default function AgentDashboard() {
     {
       title: "Approved Students",
       value: summary.approvedStudents,
-      note: `${summary.pendingStudents} pending students`,
+      note: `${summary.pendingStudents} not paid students`,
       progress: Math.min(100, summary.conversionRate),
       colorClass: "bg-amber-500",
       icon: "✅",
@@ -846,7 +844,7 @@ export default function AgentDashboard() {
                               student.status
                             )}`}
                           >
-                            {student.status || "pending"}
+                            {student.status === "not_paid" ? "Not Paid" : student.status === "quit" ? "Quit" : student.status || "not_paid"}
                           </span>
                         </td>
 
@@ -903,7 +901,7 @@ export default function AgentDashboard() {
                   Suggestion
                 </p>
                 <p className="mt-2 text-sm leading-6 text-indigo-700">
-                  Focus on pending students first, then move them to approved
+                  Focus on not paid students first, then move them to paid
                   status after payment confirmation so wallet and dashboard stay
                   updated correctly.
                 </p>

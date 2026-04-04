@@ -10,6 +10,11 @@ const API_BASE = (
 
 const TOKEN_KEYS = ["token", "auth_token", "access_token"];
 const SUCCESS_REFERRAL_STATUSES = ["approved", "paid", "active"];
+const ACTION_OPTIONS = [
+  { value: "not_paid", label: "Not Paid" },
+  { value: "paid", label: "Paid" },
+  { value: "quit", label: "Quit" },
+];
 
 function getStoredToken() {
   if (typeof window === "undefined") return "";
@@ -34,9 +39,19 @@ function getHeaders() {
   };
 }
 
-async function apiRequest(endpoint) {
+async function apiRequest(endpoint, options = {}) {
+  const headers = {
+    ...getHeaders(),
+    ...(options.headers || {}),
+  };
+
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
+
   const response = await fetch(`${API_BASE}${endpoint}`, {
-    headers: getHeaders(),
+    ...options,
+    headers,
   });
 
   const result = await response.json().catch(() => ({}));
@@ -76,15 +91,29 @@ function getStatusBadgeClass(status) {
     return "bg-emerald-100 text-emerald-700 border border-emerald-200";
   }
 
-  if (["pending"].includes(value)) {
+  if (["pending", "not_paid"].includes(value)) {
     return "bg-amber-100 text-amber-700 border border-amber-200";
   }
 
-  if (["inactive", "rejected", "suspended"].includes(value)) {
+  if (["inactive", "rejected", "suspended", "quit"].includes(value)) {
     return "bg-rose-100 text-rose-700 border border-rose-200";
   }
 
   return "bg-slate-100 text-slate-700 border border-slate-200";
+}
+
+function formatStatusLabel(status) {
+  const value = String(status || '').toLowerCase();
+
+  if (value === 'not_paid') return 'Not Paid';
+  if (value === 'paid') return 'Paid';
+  if (value === 'quit') return 'Quit';
+  if (value === 'approved') return 'Approved';
+  if (value === 'pending') return 'Pending';
+
+  return String(status || 'Not Paid')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
 function normalizeAgent(item = {}) {
@@ -119,7 +148,7 @@ function normalizeStudentRow(row, index, currency = "RWF") {
     commissionPercentage: Number(row?.commission_percentage || 0),
     commissionAmount: Number(row?.commission_amount || 0),
     currency: row?.currency || currency,
-    status: row?.status || "pending",
+    status: row?.status || "not_paid",
     registeredAt: row?.registered_at || row?.created_at || null,
     createdAt: row?.created_at || null,
   };
@@ -171,10 +200,13 @@ export default function AgentPageDetail() {
     expected_commission: 0,
   });
   const [rows, setRows] = useState([]);
+  const [message, setMessage] = useState('');
+  const [actionLoadingId, setActionLoadingId] = useState(null);
 
   async function loadDetail(isRefresh = false) {
     try {
-      setPageError("");
+      setPageError('');
+      setMessage('');
 
       if (isRefresh) {
         setRefreshing(true);
@@ -213,6 +245,29 @@ export default function AgentPageDetail() {
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  }
+
+
+  async function handleActionChange(row, action) {
+    if (!row?.id || !action) return;
+
+    setActionLoadingId(row.id);
+    setPageError('');
+    setMessage('');
+
+    try {
+      const response = await apiRequest(`/agents/${id}/students/${row.id}/action`, {
+        method: 'PATCH',
+        body: JSON.stringify({ action }),
+      });
+
+      setMessage(response?.message || 'Student action updated successfully.');
+      await loadDetail(true);
+    } catch (error) {
+      setPageError(error?.message || 'Could not update student action.');
+    } finally {
+      setActionLoadingId(null);
     }
   }
 
@@ -299,6 +354,12 @@ export default function AgentPageDetail() {
         </div>
       </section>
 
+      {message ? (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          {message}
+        </div>
+      ) : null}
+
       {pageError ? (
         <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
           {pageError}
@@ -323,19 +384,19 @@ export default function AgentPageDetail() {
           note="All students under this agent"
         />
         <SummaryCard
-          label="Pending Students"
+          label="Not Paid Students"
           value={stats.pending_students}
-          note="Waiting for admin approval"
+          note="Waiting for payment/admin action"
         />
         <SummaryCard
           label="Approved Students"
           value={stats.approved_students || approvedCount}
-          note="Approved / paid students"
+          note="Paid / approved students"
         />
         <SummaryCard
           label="Total Commission"
           value={formatCurrency(stats.total_commission, agent.walletCurrency)}
-          note={`Expected pending: ${formatCurrency(
+          note={`Expected not paid: ${formatCurrency(
             stats.expected_commission,
             agent.walletCurrency
           )}`}
@@ -405,6 +466,9 @@ export default function AgentPageDetail() {
                     <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
                       Registered
                     </th>
+                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+                      Action
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 bg-white">
@@ -427,7 +491,7 @@ export default function AgentPageDetail() {
                             row.status
                           )}`}
                         >
-                          {row.status || "pending"}
+                          {formatStatusLabel(row.status)}
                         </span>
                       </td>
                       <td className="px-4 py-4 align-top">
@@ -440,6 +504,22 @@ export default function AgentPageDetail() {
                       </td>
                       <td className="px-4 py-4 align-top text-sm text-slate-600">
                         {formatDate(row.registeredAt || row.createdAt)}
+                      </td>
+                      <td className="px-4 py-4 align-top">
+                        <select
+                          value={String(row.status || 'not_paid').toLowerCase()}
+                          onChange={(event) => handleActionChange(row, event.target.value)}
+                          disabled={actionLoadingId === row.id}
+                          className="w-full min-w-[140px] rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                        >
+                          {ACTION_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {actionLoadingId === row.id && option.value === String(row.status || 'not_paid').toLowerCase()
+                                ? 'Updating...'
+                                : option.label}
+                            </option>
+                          ))}
+                        </select>
                       </td>
                     </tr>
                   ))}
