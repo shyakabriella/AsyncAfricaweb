@@ -123,50 +123,58 @@ function getStatusClasses(status) {
 }
 
 function normalizeAgent(data = {}) {
+  const source = data?.agent && typeof data.agent === "object" ? data.agent : data;
+
   return {
-    id: data?.id || "",
-    name: data?.name || "Agent",
-    email: data?.email || "",
-    phone: data?.phone || "",
+    id: source?.id || data?.id || "",
+    name: source?.name || data?.name || "Agent",
+    email: source?.email || data?.email || "",
+    phone: source?.phone || data?.phone || "",
     commission_percentage: Number(
-      data?.commission_percentage ??
-        data?.agent_profile?.commission_percentage ??
-        data?.profile?.commission_percentage ??
+      source?.commission_percentage ??
+        source?.agent_profile?.commission_percentage ??
+        source?.profile?.commission_percentage ??
+        data?.commission_percentage ??
         0
     ),
-    is_active: Boolean(data?.is_active ?? true),
-    status: data?.status || (data?.is_active ? "active" : "inactive"),
+    is_active: Boolean(source?.is_active ?? data?.is_active ?? true),
+    status:
+      source?.status ||
+      data?.status ||
+      (source?.is_active || data?.is_active ? "active" : "inactive"),
     image_url:
+      source?.image_url ||
+      source?.profile?.image_url ||
+      source?.agent_profile?.image_url ||
       data?.image_url ||
-      data?.profile?.image_url ||
-      data?.agent_profile?.image_url ||
       "",
     wallet: {
       balance: Number(
-        data?.wallet?.balance ??
-          data?.agent?.wallet?.balance ??
+        source?.wallet?.balance ??
+          data?.wallet?.balance ??
+          source?.wallet_balance ??
           data?.wallet_balance ??
           0
       ),
       currency:
+        source?.wallet?.currency ||
         data?.wallet?.currency ||
-        data?.agent?.wallet?.currency ||
+        source?.currency ||
         data?.currency ||
         "RWF",
-      status:
-        data?.wallet?.status ||
-        data?.agent?.wallet?.status ||
-        "active",
+      status: source?.wallet?.status || data?.wallet?.status || "active",
     },
     stats: {
       total_students: Number(
         data?.stats?.total_students ??
-          data?.total_students ??
+          source?.stats?.total_students ??
+          source?.total_students ??
           0
       ),
       total_commission: Number(
         data?.stats?.total_commission ??
-          data?.total_commission ??
+          source?.stats?.total_commission ??
+          source?.total_commission ??
           0
       ),
     },
@@ -174,35 +182,47 @@ function normalizeAgent(data = {}) {
 }
 
 function normalizeStudent(student, index, defaultCurrency = "RWF") {
+  const referral =
+    student?.referred_by_agent ||
+    student?.referredByAgent ||
+    student?.referral ||
+    student;
+
   return {
     id:
+      referral?.referral_id ||
+      referral?.id ||
       student?.referral_id ||
-      student?.id ||
       student?.student_id ||
+      student?.id ||
       index + 1,
-    studentId: student?.student_id || student?.id || "",
+    studentId: student?.student_id || student?.id || referral?.student_user_id || "",
     studentName:
       student?.student_name ||
       student?.name ||
-      [
-        student?.first_name,
-        student?.last_name,
-      ]
-        .filter(Boolean)
-        .join(" ") ||
+      [student?.first_name, student?.last_name].filter(Boolean).join(" ") ||
       "Student",
     studentEmail: student?.student_email || student?.email || "",
     studentPhone: student?.student_phone || student?.phone || "",
     programName:
+      referral?.program?.name ||
       student?.program?.name ||
       student?.program_name ||
       student?.program_title ||
+      student?.programs?.[0]?.name ||
       "No Program",
-    commissionAmount: Number(student?.commission_amount || 0),
-    commissionPercentage: Number(student?.commission_percentage || 0),
-    status: String(student?.status || "pending").toLowerCase(),
-    currency: student?.currency || defaultCurrency,
+    commissionAmount: Number(
+      referral?.commission_amount ?? student?.commission_amount ?? 0
+    ),
+    commissionPercentage: Number(
+      referral?.commission_percentage ?? student?.commission_percentage ?? 0
+    ),
+    status: String(
+      referral?.status || student?.status || "pending"
+    ).toLowerCase(),
+    currency: referral?.currency || student?.currency || defaultCurrency,
     registeredAt:
+      referral?.registered_at ||
       student?.registered_at ||
       student?.submitted_at ||
       student?.created_at ||
@@ -210,7 +230,7 @@ function normalizeStudent(student, index, defaultCurrency = "RWF") {
   };
 }
 
-function pickStudentsFromPayload(payload, defaultCurrency) {
+function pickStudentsFromPayload(payload, defaultCurrency, selectedAgentId) {
   if (!payload) return [];
 
   const possibleArrays = [
@@ -227,9 +247,22 @@ function pickStudentsFromPayload(payload, defaultCurrency) {
   const firstArray = possibleArrays.find((item) => Array.isArray(item));
   if (!firstArray) return [];
 
-  return firstArray.map((item, index) =>
-    normalizeStudent(item, index, defaultCurrency)
-  );
+  let rows = firstArray;
+
+  if (selectedAgentId) {
+    rows = rows.filter((item) => {
+      const referral = item?.referred_by_agent || item?.referredByAgent || item?.referral || item;
+      const agentUserId = referral?.agent_user_id || referral?.agentUserId || item?.agent_user_id;
+
+      if (agentUserId == null || agentUserId === "") {
+        return true;
+      }
+
+      return String(agentUserId) === String(selectedAgentId);
+    });
+  }
+
+  return rows.map((item, index) => normalizeStudent(item, index, defaultCurrency));
 }
 
 function SummaryCard({ label, value, note }) {
@@ -274,6 +307,7 @@ export default function AgentPageDetail() {
       agent: null,
       dashboard: null,
       students: null,
+      users: null,
     };
 
     try {
@@ -289,25 +323,32 @@ export default function AgentPageDetail() {
         results.students = await apiRequest(`/agents/${id}/students`);
       } catch {}
 
-      if (!results.agent && !results.dashboard && !results.students && !passedAgent) {
+      try {
+        results.users = await apiRequest(`/users?role=student`);
+      } catch {}
+
+      if (!results.agent && !results.dashboard && !results.students && !results.users && !passedAgent) {
         throw new Error("Could not load this agent detail page.");
       }
 
       const mergedAgent = normalizeAgent({
         ...(passedAgent || {}),
-        ...((results.agent?.data && !Array.isArray(results.agent?.data))
-          ? results.agent.data
-          : {}),
-        ...((results.dashboard?.data && !Array.isArray(results.dashboard?.data))
-          ? results.dashboard.data?.agent || results.dashboard.data
-          : {}),
+        ...(results.agent?.data || {}),
+        ...(results.dashboard?.data || {}),
       });
 
       const defaultCurrency = mergedAgent?.wallet?.currency || "RWF";
 
       let mergedStudents = [];
-      for (const payload of [results.agent?.data, results.dashboard?.data, results.students?.data, results.students]) {
-        const rows = pickStudentsFromPayload(payload, defaultCurrency);
+      for (const payload of [
+        results.agent?.data,
+        results.dashboard?.data,
+        results.students?.data,
+        results.students,
+        results.users?.data,
+        results.users,
+      ]) {
+        const rows = pickStudentsFromPayload(payload, defaultCurrency, id);
         if (rows.length > 0) {
           mergedStudents = rows;
           break;
@@ -558,8 +599,9 @@ export default function AgentPageDetail() {
                 No registered students found
               </h3>
               <p className="mt-2 text-sm text-slate-500">
-                This agent has no students yet, or the backend detail endpoint
-                is not returning the student list.
+                This agent has no students yet, or the backend does not expose a
+                direct student-detail endpoint. This page now also checks the
+                users endpoint and filters students by referral agent.
               </p>
             </div>
           ) : (
