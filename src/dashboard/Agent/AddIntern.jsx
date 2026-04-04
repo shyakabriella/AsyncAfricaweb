@@ -88,11 +88,11 @@ function formatDate(dateValue) {
 function getStatusBadgeClass(status) {
   const value = String(status || "").toLowerCase();
 
-  if (["active", "approved", "paid"].includes(value)) {
+  if (["active", "approved", "paid", "accepted"].includes(value)) {
     return "bg-emerald-100 text-emerald-700";
   }
 
-  if (["pending"].includes(value)) {
+  if (["pending", "reviewed", "waitlisted"].includes(value)) {
     return "bg-amber-100 text-amber-700";
   }
 
@@ -153,7 +153,6 @@ export default function Addintern() {
     name: "",
     email: "",
     phone: "",
-    status: "active",
     program_id: "",
     notes: "",
   });
@@ -198,7 +197,7 @@ export default function Addintern() {
       setStudents([]);
       setStats({
         total_students: 0,
-            total_commission: 0,
+        total_commission: 0,
       });
     } finally {
       setLoading(false);
@@ -245,7 +244,6 @@ export default function Addintern() {
       name: "",
       email: "",
       phone: "",
-      status: "active",
       program_id: "",
       notes: "",
     });
@@ -262,8 +260,8 @@ export default function Addintern() {
         name: form.name.trim(),
         email: form.email.trim() || null,
         phone: form.phone.trim() || null,
-        status: form.status,
-        is_active: form.status === "active",
+        status: "pending",
+        is_active: false,
         program_id: Number(form.program_id),
         notes: form.notes.trim() || null,
       };
@@ -275,13 +273,12 @@ export default function Addintern() {
 
       const createdReferral = data?.data?.referral || {};
       const createdProgram = createdReferral?.program || {};
-      const commissionValue = Number(createdReferral?.commission_amount || 0);
-      const currency = createdReferral?.currency || "RWF";
+      const referralStatus = String(createdReferral?.status || "pending");
 
       setFeedback(
-        `Student created under this agent successfully. Program: ${
+        `Student created successfully. Program: ${
           createdProgram?.name || "Selected Program"
-        }. Commission added: ${formatCurrency(commissionValue, currency)}.`
+        }. Current status: ${referralStatus}. This student will stay pending until admin approves.`
       );
 
       resetForm();
@@ -299,9 +296,9 @@ export default function Addintern() {
         <p className="text-sm font-medium text-white/80">Agent Workspace</p>
         <h1 className="mt-2 text-2xl font-bold md:text-3xl">Add Intern</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-white/85">
-          This page now works only with the logged-in agent. The agent sees only
-          students registered under him, together with the program, program
-          price, commission percentage, and commission earned.
+          This page now works only with the logged-in agent. New students added
+          by agent are saved with pending status first, and admin must approve
+          them before they are treated as approved.
         </p>
       </section>
 
@@ -314,7 +311,7 @@ export default function Addintern() {
         <SummaryCard
           label="Total Commission"
           value={formatCurrency(stats.total_commission, "RWF")}
-          note="Wallet amount earned from agent referrals"
+          note="Commission already counted by your system rules"
         />
         <SummaryCard
           label="Default Commission"
@@ -329,9 +326,15 @@ export default function Addintern() {
             Register Student Under Agent
           </h2>
           <p className="mt-2 text-sm text-slate-600">
-            When you select a program, the system uses that program price to
-            calculate agent commission automatically.
+            When you select a program, the system calculates expected commission.
+            But the student will remain pending until admin approval.
           </p>
+
+          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Agent cannot approve student from this page. Every new student is
+            submitted as <span className="font-semibold">pending</span> and
+            waits for admin approval.
+          </div>
 
           {feedback ? (
             <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
@@ -443,18 +446,14 @@ export default function Addintern() {
 
             <div>
               <label className="mb-2 block text-sm font-semibold text-slate-700">
-                Status
+                Approval Status
               </label>
-              <select
-                name="status"
-                value={form.status}
-                onChange={handleChange}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-indigo-500"
-              >
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-                <option value="suspended">Suspended</option>
-              </select>
+              <input
+                type="text"
+                value="Pending until admin approves"
+                readOnly
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-600 outline-none"
+              />
             </div>
 
             <div>
@@ -488,7 +487,8 @@ export default function Addintern() {
                 Students Registered Under This Agent
               </h2>
               <p className="mt-1 text-sm text-slate-600">
-                This list shows only referrals created by the logged-in agent.
+                New students from agent should appear here with pending status
+                until admin approves them.
               </p>
             </div>
 
