@@ -4,7 +4,8 @@ const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api";
 
 const AGENT_DASHBOARD_ENDPOINT = "/agents/me/dashboard";
-const SUCCESS_REFERRAL_STATUSES = ["approved", "paid", "active"];
+const SUCCESS_REFERRAL_STATUSES = ["approved", "paid"];
+const PENDING_REFERRAL_STATUSES = ["pending"];
 
 function parseStoredUser(value) {
   try {
@@ -84,7 +85,7 @@ function formatDate(dateValue) {
 function getStatusBadgeClass(status) {
   const value = String(status || "").toLowerCase();
 
-  if (["active", "approved", "paid"].includes(value)) {
+  if (["approved", "paid"].includes(value)) {
     return "bg-emerald-500/15 text-emerald-300 border border-emerald-500/20";
   }
 
@@ -101,6 +102,10 @@ function getStatusBadgeClass(status) {
 
 function isSuccessfulReferralStatus(status) {
   return SUCCESS_REFERRAL_STATUSES.includes(String(status || "").toLowerCase());
+}
+
+function isPendingReferralStatus(status) {
+  return PENDING_REFERRAL_STATUSES.includes(String(status || "").toLowerCase());
 }
 
 function formatRoleLabel(role) {
@@ -143,9 +148,6 @@ function normalizeAgentStudentRow(row, index, currency = "RWF") {
     studentPhone: row?.student_phone || "",
     programName: row?.program?.name || "No Program",
     programSlug: row?.program?.slug || "",
-    programPrice: Number(
-      row?.program?.price ?? row?.program_price ?? row?.amount_paid ?? 0
-    ),
     amountPaid: Number(row?.amount_paid || 0),
     commissionPercentage: Number(row?.commission_percentage || 0),
     commissionAmount: Number(row?.commission_amount || 0),
@@ -198,8 +200,10 @@ export default function Wallet() {
   const [rows, setRows] = useState([]);
   const [stats, setStats] = useState({
     total_students: 0,
-    total_amount_paid: 0,
     total_commission: 0,
+    expected_commission: 0,
+    approved_students: 0,
+    pending_students: 0,
   });
 
   async function loadWallet(isRefresh = false) {
@@ -243,6 +247,7 @@ export default function Wallet() {
 
       const commissionPercentage = Number(
         data?.agent?.profile?.commission_percentage ??
+          data?.agent?.agentProfile?.commission_percentage ??
           meData.commissionPercentage ??
           0
       );
@@ -261,8 +266,10 @@ export default function Wallet() {
 
       setStats({
         total_students: Number(statsData?.total_students || 0),
-        total_amount_paid: Number(statsData?.total_amount_paid || 0),
         total_commission: Number(statsData?.total_commission || 0),
+        expected_commission: Number(statsData?.expected_commission || 0),
+        approved_students: Number(statsData?.approved_students || 0),
+        pending_students: Number(statsData?.pending_students || 0),
       });
 
       setRows(
@@ -275,8 +282,10 @@ export default function Wallet() {
       setRows([]);
       setStats({
         total_students: 0,
-        total_amount_paid: 0,
         total_commission: 0,
+        expected_commission: 0,
+        approved_students: 0,
+        pending_students: 0,
       });
     } finally {
       setLoading(false);
@@ -289,8 +298,12 @@ export default function Wallet() {
   }, []);
 
   const summary = useMemo(() => {
-    const successfulRows = rows.filter((item) =>
+    const approvedRows = rows.filter((item) =>
       isSuccessfulReferralStatus(item.status)
+    );
+
+    const pendingRows = rows.filter((item) =>
+      isPendingReferralStatus(item.status)
     );
 
     const averageCommission =
@@ -303,9 +316,21 @@ export default function Wallet() {
 
     return {
       currentBalance: Number(currentUser.walletBalance || 0),
-      totalStudents: Number(stats.total_students || 0),
-      totalCommission: Number(stats.total_commission || 0),
-      successfulStudents: successfulRows.length,
+      totalStudents: Number(stats.total_students || rows.length || 0),
+      totalCommission:
+        Number(stats.total_commission || 0) ||
+        approvedRows.reduce(
+          (sum, item) => sum + Number(item.commissionAmount || 0),
+          0
+        ),
+      expectedCommission:
+        Number(stats.expected_commission || 0) ||
+        pendingRows.reduce(
+          (sum, item) => sum + Number(item.commissionAmount || 0),
+          0
+        ),
+      successfulStudents:
+        Number(stats.approved_students || 0) || approvedRows.length,
       averageCommission: Math.round(averageCommission * 100) / 100,
     };
   }, [rows, stats, currentUser.walletBalance, currentUser.commissionPercentage]);
@@ -325,8 +350,9 @@ export default function Wallet() {
                 Welcome, {currentUser?.name || "Agent"}
               </h1>
               <p className="mt-2 max-w-2xl text-sm text-white/65">
-                This page shows only the logged-in agent referral summary and
-                commission information.
+                Pending referrals stay under expected commission. Commission is
+                counted in wallet only after the referral status becomes approved
+                or paid.
               </p>
             </div>
 
@@ -358,7 +384,7 @@ export default function Wallet() {
           </div>
         ) : null}
 
-        <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <StatCard
             title="Total Registered Students"
             value={summary.totalStudents}
@@ -368,7 +394,13 @@ export default function Wallet() {
           <StatCard
             title="Total Commission"
             value={formatCurrency(summary.totalCommission, currency)}
-            note="Commission earned from registered students"
+            note="Only approved referrals are counted"
+          />
+
+          <StatCard
+            title="Expected Commission"
+            value={formatCurrency(summary.expectedCommission, currency)}
+            note="Pending referrals waiting for approval"
           />
 
           <StatCard
@@ -380,7 +412,7 @@ export default function Wallet() {
           <StatCard
             title="Approved Students"
             value={summary.successfulStudents}
-            note="Referrals already approved or paid"
+            note="Students already approved or paid"
           />
         </div>
 
@@ -390,8 +422,8 @@ export default function Wallet() {
               Agent Commission Summary
             </h2>
             <p className="mt-2 text-sm leading-6 text-white/65">
-              This section shows the logged-in agent details and commission
-              summary.
+              The wallet balance reflects only approved commission. Pending
+              commission stays under expected commission until approval.
             </p>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -459,8 +491,8 @@ export default function Wallet() {
               Students Registered by Agent
             </h2>
             <p className="mt-1 text-sm text-white/65">
-              This table shows the selected program, commission percentage,
-              commission earned, and current referral status.
+              This table shows program, commission percentage, commission, and
+              current referral status.
             </p>
           </div>
 
