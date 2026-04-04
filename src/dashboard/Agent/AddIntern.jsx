@@ -57,11 +57,26 @@ async function apiRequest(endpoint, options = {}) {
 }
 
 function normalizePrograms(payload) {
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.data)) return payload.data;
-  if (Array.isArray(payload?.programs)) return payload.programs;
-  if (Array.isArray(payload?.data?.programs)) return payload.data.programs;
-  return [];
+  const programs = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.data)
+    ? payload.data
+    : Array.isArray(payload?.programs)
+    ? payload.programs
+    : Array.isArray(payload?.data?.programs)
+    ? payload.data.programs
+    : [];
+
+  return programs.map((program) => ({
+    id: program?.id ?? "",
+    name: program?.name || "Unnamed Program",
+    slug: program?.slug || "",
+    category: program?.category || "",
+    duration: program?.duration || "",
+    start_date: program?.start_date || null,
+    end_date: program?.end_date || null,
+    price: Number(program?.price || 0),
+  }));
 }
 
 function formatCurrency(amount, currency = "RWF") {
@@ -92,7 +107,7 @@ function getStatusBadgeClass(status) {
     return "bg-emerald-100 text-emerald-700";
   }
 
-  if (["pending"].includes(value)) {
+  if (value === "pending") {
     return "bg-amber-100 text-amber-700";
   }
 
@@ -103,18 +118,33 @@ function getStatusBadgeClass(status) {
   return "bg-slate-100 text-slate-700";
 }
 
-function normalizeStudentRow(row, index) {
+function normalizeStudentRow(row, index, priceMap) {
+  const programId = row?.program?.id ?? row?.program_id ?? "";
+  const matchedProgramPrice =
+    programId !== "" && Object.prototype.hasOwnProperty.call(priceMap, String(programId))
+      ? Number(priceMap[String(programId)] || 0)
+      : null;
+
+  const fallbackProgramPrice = Number(
+    row?.program?.price ?? row?.program_price ?? row?.amount_paid ?? 0
+  );
+
+  const finalProgramPrice =
+    matchedProgramPrice !== null && matchedProgramPrice > 0
+      ? matchedProgramPrice
+      : fallbackProgramPrice;
+
   return {
     id: row?.referral_id || index + 1,
+    referralId: row?.referral_id || index + 1,
     studentId: row?.student_id || "",
     studentName: row?.student_name || "Student",
     studentEmail: row?.student_email || "",
     studentPhone: row?.student_phone || "",
+    programId,
     programName: row?.program?.name || "No Program",
     programSlug: row?.program?.slug || "",
-    programPrice: Number(
-      row?.program?.price ?? row?.program_price ?? row?.amount_paid ?? 0
-    ),
+    programPrice: finalProgramPrice,
     amountPaid: Number(row?.amount_paid || 0),
     commissionPercentage: Number(row?.commission_percentage || 0),
     commissionAmount: Number(row?.commission_amount || 0),
@@ -135,7 +165,7 @@ function SummaryCard({ label, value, note }) {
 }
 
 export default function Addintern() {
-  const [students, setStudents] = useState([]);
+  const [rawStudents, setRawStudents] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingPrograms, setLoadingPrograms] = useState(true);
@@ -145,11 +175,6 @@ export default function Addintern() {
   const [feedback, setFeedback] = useState("");
   const [error, setError] = useState("");
   const [agentCommission, setAgentCommission] = useState(0);
-  const [stats, setStats] = useState({
-    total_students: 0,
-    total_amount_paid: 0,
-    total_commission: 0,
-  });
 
   const [form, setForm] = useState({
     name: "",
@@ -159,6 +184,35 @@ export default function Addintern() {
     program_id: "",
     notes: "",
   });
+
+  const programPriceMap = useMemo(() => {
+    return programs.reduce((acc, program) => {
+      acc[String(program.id)] = Number(program.price || 0);
+      return acc;
+    }, {});
+  }, [programs]);
+
+  const students = useMemo(() => {
+    return rawStudents.map((row, index) =>
+      normalizeStudentRow(row, index, programPriceMap)
+    );
+  }, [rawStudents, programPriceMap]);
+
+  const totals = useMemo(() => {
+    return students.reduce(
+      (acc, student) => {
+        acc.total_students += 1;
+        acc.total_program_amount += Number(student.programPrice || 0);
+        acc.total_commission += Number(student.commissionAmount || 0);
+        return acc;
+      },
+      {
+        total_students: 0,
+        total_program_amount: 0,
+        total_commission: 0,
+      }
+    );
+  }, [students]);
 
   const loadPrograms = async () => {
     setLoadingPrograms(true);
@@ -187,23 +241,13 @@ export default function Addintern() {
       const payload = data?.data || {};
       const rows = Array.isArray(payload?.students) ? payload.students : [];
 
-      setStudents(rows.map((row, index) => normalizeStudentRow(row, index)));
-      setStats({
-        total_students: Number(payload?.stats?.total_students || 0),
-        total_amount_paid: Number(payload?.stats?.total_amount_paid || 0),
-        total_commission: Number(payload?.stats?.total_commission || 0),
-      });
+      setRawStudents(rows);
       setAgentCommission(
         Number(payload?.agent?.profile?.commission_percentage || 0)
       );
     } catch (err) {
       setError(err.message || "Failed to load students.");
-      setStudents([]);
-      setStats({
-        total_students: 0,
-        total_amount_paid: 0,
-        total_commission: 0,
-      });
+      setRawStudents([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -303,26 +347,25 @@ export default function Addintern() {
         <p className="text-sm font-medium text-white/80">Agent Workspace</p>
         <h1 className="mt-2 text-2xl font-bold md:text-3xl">Add Intern</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-white/85">
-          This page now works only with the logged-in agent. The agent sees only
-          students registered under him, together with the program, program
-          price, commission percentage, and commission earned.
+          This page now uses the selected program price and the program price
+          list to display the correct total program amount for this agent.
         </p>
       </section>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
           label="My Students"
-          value={stats.total_students}
+          value={totals.total_students}
           note="Only students registered under this agent"
         />
         <SummaryCard
           label="Total Program Amount"
-          value={formatCurrency(stats.total_amount_paid, "RWF")}
-          note="Total amount used for commission calculation"
+          value={formatCurrency(totals.total_program_amount, "RWF")}
+          note="Calculated from program prices, not backend total_amount_paid"
         />
         <SummaryCard
           label="Total Commission"
-          value={formatCurrency(stats.total_commission, "RWF")}
+          value={formatCurrency(totals.total_commission, "RWF")}
           note="Wallet amount earned from agent referrals"
         />
         <SummaryCard
@@ -593,10 +636,7 @@ export default function Addintern() {
                           {student.commissionPercentage}%
                         </td>
                         <td className="px-4 py-4 text-sm font-semibold text-indigo-700">
-                          {formatCurrency(
-                            student.commissionAmount,
-                            student.currency
-                          )}
+                          {formatCurrency(student.commissionAmount, student.currency)}
                         </td>
                         <td className="px-4 py-4 text-sm text-slate-700">
                           <span
