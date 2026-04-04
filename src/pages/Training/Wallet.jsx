@@ -293,24 +293,6 @@ export default function Wallet() {
       isSuccessfulReferralStatus(item.status)
     );
 
-    const pendingRows = rows.filter(
-      (item) => !isSuccessfulReferralStatus(item.status)
-    );
-
-    const thisMonth = new Date();
-    const thisMonthRows = rows.filter((item) => {
-      const rawDate = item.registeredAt || item.createdAt;
-      if (!rawDate) return false;
-
-      const d = new Date(rawDate);
-      if (Number.isNaN(d.getTime())) return false;
-
-      return (
-        d.getMonth() === thisMonth.getMonth() &&
-        d.getFullYear() === thisMonth.getFullYear()
-      );
-    });
-
     const averageCommission =
       rows.length > 0
         ? rows.reduce(
@@ -322,15 +304,8 @@ export default function Wallet() {
     return {
       currentBalance: Number(currentUser.walletBalance || 0),
       totalStudents: Number(stats.total_students || 0),
-      totalAmountPaid: Number(stats.total_amount_paid || 0),
       totalCommission: Number(stats.total_commission || 0),
-      thisMonthStudents: thisMonthRows.length,
-      thisMonthCommission: thisMonthRows.reduce(
-        (sum, item) => sum + Number(item.commissionAmount || 0),
-        0
-      ),
       successfulStudents: successfulRows.length,
-      pendingStudents: pendingRows.length,
       averageCommission: Math.round(averageCommission * 100) / 100,
     };
   }, [rows, stats, currentUser.walletBalance, currentUser.commissionPercentage]);
@@ -350,9 +325,8 @@ export default function Wallet() {
                 Welcome, {currentUser?.name || "Agent"}
               </h1>
               <p className="mt-2 max-w-2xl text-sm text-white/65">
-                This page now reads only the logged-in agent referrals and
-                calculates wallet balance from program price and the commission
-                percentage set by admin.
+                This page shows only the logged-in agent referral summary and
+                commission information.
               </p>
             </div>
 
@@ -392,12 +366,6 @@ export default function Wallet() {
           />
 
           <StatCard
-            title="Total Program Amount"
-            value={formatCurrency(summary.totalAmountPaid, currency)}
-            note="Program amount used to calculate commission"
-          />
-
-          <StatCard
             title="Total Commission"
             value={formatCurrency(summary.totalCommission, currency)}
             note="Commission earned from registered students"
@@ -408,28 +376,11 @@ export default function Wallet() {
             value={`${summary.averageCommission}%`}
             note="Allowed commission for this agent"
           />
-        </div>
 
-        <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard
-            title="This Month Students"
-            value={summary.thisMonthStudents}
-            note="Students added this month"
-          />
-          <StatCard
-            title="This Month Commission"
-            value={formatCurrency(summary.thisMonthCommission, currency)}
-            note="Commission generated this month"
-          />
           <StatCard
             title="Approved Students"
             value={summary.successfulStudents}
             note="Referrals already approved or paid"
-          />
-          <StatCard
-            title="Pending Students"
-            value={summary.pendingStudents}
-            note="Referrals still waiting"
           />
         </div>
 
@@ -439,8 +390,8 @@ export default function Wallet() {
               Agent Commission Summary
             </h2>
             <p className="mt-2 text-sm leading-6 text-white/65">
-              Wallet balance is recalculated from all referrals using program
-              price and the current commission percentage set for the agent.
+              This section shows the logged-in agent details and commission
+              summary.
             </p>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -508,8 +459,8 @@ export default function Wallet() {
               Students Registered by Agent
             </h2>
             <p className="mt-1 text-sm text-white/65">
-              This table shows the selected program, program fee, commission
-              percentage, commission earned, and current referral status.
+              This table shows the selected program, commission percentage,
+              commission earned, and current referral status.
             </p>
           </div>
 
@@ -528,7 +479,6 @@ export default function Wallet() {
                   <tr className="text-xs uppercase tracking-[0.14em] text-[#A7A9BE]">
                     <th className="px-5 py-4 font-semibold">Student</th>
                     <th className="px-5 py-4 font-semibold">Program</th>
-                    <th className="px-5 py-4 font-semibold">Program Fee</th>
                     <th className="px-5 py-4 font-semibold">Commission %</th>
                     <th className="px-5 py-4 font-semibold">Commission</th>
                     <th className="px-5 py-4 font-semibold">Status</th>
@@ -558,10 +508,6 @@ export default function Wallet() {
                         <div className="mt-1 text-xs text-white/55">
                           {row.programSlug || "-"}
                         </div>
-                      </td>
-
-                      <td className="px-5 py-4 align-top font-semibold text-white">
-                        {formatCurrency(row.programPrice, row.currency)}
                       </td>
 
                       <td className="px-5 py-4 align-top font-semibold text-white">
