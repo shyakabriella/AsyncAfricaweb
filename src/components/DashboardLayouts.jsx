@@ -43,12 +43,12 @@ function getTitle(path, role) {
     return getBaseDashboardTitle(normalizedRole);
   }
 
-  if (path.startsWith("/dashboard/agents/")) {
-    return "Agent Details";
-  }
-
   if (path === "/dashboard/agents") {
     return "Agent Management";
+  }
+
+  if (path.startsWith("/dashboard/agents/")) {
+    return "Agent Details";
   }
 
   if (path.includes("/dashboard/programs")) {
