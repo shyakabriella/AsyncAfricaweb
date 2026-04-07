@@ -33,6 +33,7 @@ import AgentDashboard from "../dashboard/Agent/AgentDashboard";
 import AddIntern from "../dashboard/Agent/AddIntern";
 import CeoDashboard from "../dashboard/ceo/CeoDashboard";
 import TrainerDashboard from "../dashboard/Trainer/TrainerDashboard";
+import WebPhonePage from "../dashboard/WebPhonePage";
 
 import {
   getAuthState,
@@ -64,6 +65,7 @@ function PublicOnlyRoute({ children }) {
 
 function RequireRole({ allowedRoles = [], children }) {
   const { token, role } = getAuthState();
+  const normalizedRole = normalizeRole(role);
   const normalizedAllowedRoles = allowedRoles.map((item) =>
     normalizeRole(item)
   );
@@ -72,7 +74,7 @@ function RequireRole({ allowedRoles = [], children }) {
     return <Navigate to="/login" replace />;
   }
 
-  if (!normalizedAllowedRoles.includes(role)) {
+  if (!normalizedAllowedRoles.includes(normalizedRole)) {
     return <Navigate to={getDashboardPathByRole(role)} replace />;
   }
 
@@ -307,6 +309,29 @@ export default function AppRoutes() {
                 <SystemSetting />
               </RequireRole>
             }
+          />
+
+          <Route
+            path="phone"
+            element={
+              <RequireRole
+                allowedRoles={[
+                  "admin",
+                  "ceo",
+                  "trainer",
+                  "agent",
+                  "student",
+                  "school_owner",
+                ]}
+              >
+                <WebPhonePage />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="call"
+            element={<Navigate to="/dashboard/phone" replace />}
           />
         </Route>
 
