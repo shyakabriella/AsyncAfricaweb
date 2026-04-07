@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Mail, PhoneCall, X } from "lucide-react";
 import Footer from "./Footer";
 import Header from "./Header";
@@ -12,7 +12,6 @@ import {
 } from "../lib/auth";
 
 const MAIL_POPUP_URL = "https://mail.asyncafrica.com:8443/SOGo/";
-const MICROSIP_PROTOCOL = "callto:"; // change to "sip:" if your PC is configured that way
 
 function getBaseDashboardTitle(role) {
   switch (normalizeRole(role)) {
@@ -45,6 +44,10 @@ function getTitle(path, role) {
     path === "/dashboard/agent"
   ) {
     return getBaseDashboardTitle(normalizedRole);
+  }
+
+  if (path === "/dashboard/phone" || path === "/dashboard/call") {
+    return "Web Phone";
   }
 
   if (path === "/dashboard/agents") {
@@ -103,6 +106,8 @@ function isAdminAllowedPath(path) {
   return (
     path === "/dashboard" ||
     path === "/dashboard/admin" ||
+    path === "/dashboard/phone" ||
+    path === "/dashboard/call" ||
     path.startsWith("/dashboard/agents") ||
     path.startsWith("/dashboard/programs") ||
     path.startsWith("/dashboard/applications") ||
@@ -118,6 +123,8 @@ function isTrainerAllowedPath(path) {
   return (
     path === "/dashboard" ||
     path === "/dashboard/trainer" ||
+    path === "/dashboard/phone" ||
+    path === "/dashboard/call" ||
     path.startsWith("/dashboard/internaship") ||
     path.startsWith("/dashboard/internship") ||
     path.startsWith("/dashboard/wallet")
@@ -128,6 +135,8 @@ function isCeoAllowedPath(path) {
   return (
     path === "/dashboard" ||
     path === "/dashboard/ceo" ||
+    path === "/dashboard/phone" ||
+    path === "/dashboard/call" ||
     path.startsWith("/dashboard/agents")
   );
 }
@@ -136,6 +145,8 @@ function isStudentAllowedPath(path) {
   return (
     path === "/dashboard" ||
     path === "/dashboard/student" ||
+    path === "/dashboard/phone" ||
+    path === "/dashboard/call" ||
     path.startsWith("/dashboard/internaship") ||
     path.startsWith("/dashboard/internship")
   );
@@ -145,13 +156,20 @@ function isAgentAllowedPath(path) {
   return (
     path === "/dashboard" ||
     path === "/dashboard/agent" ||
+    path === "/dashboard/phone" ||
+    path === "/dashboard/call" ||
     path.startsWith("/dashboard/agent/addintern") ||
     path.startsWith("/dashboard/wallet")
   );
 }
 
 function isSchoolOwnerAllowedPath(path) {
-  return path === "/dashboard" || path.startsWith("/dashboard/agents");
+  return (
+    path === "/dashboard" ||
+    path === "/dashboard/phone" ||
+    path === "/dashboard/call" ||
+    path.startsWith("/dashboard/agents")
+  );
 }
 
 function isAllowedPathForRole(path, role) {
@@ -173,22 +191,19 @@ function isAllowedPathForRole(path, role) {
   }
 }
 
-function sanitizePhoneValue(value) {
-  return value.replace(/[^\d+#*+@._-]/g, "").trim();
-}
-
 export default function DashboardLayouts() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
-  const [showPhoneModal, setShowPhoneModal] = useState(false);
-  const [dialNumber, setDialNumber] = useState("");
   const mailPopupRef = useRef(null);
-  const phoneInputRef = useRef(null);
 
   const { token, role: currentRole } = getAuthState();
   const normalizedRole = normalizeRole(currentRole);
   const isAdmin = normalizedRole === "admin";
+  const isPhonePage =
+    location.pathname === "/dashboard/phone" ||
+    location.pathname === "/dashboard/call";
 
   useEffect(() => {
     const media = window.matchMedia("(min-width: 1024px)");
@@ -224,13 +239,10 @@ export default function DashboardLayouts() {
     const handleEscape = (event) => {
       if (event.key === "Escape") {
         setShowEmailModal(false);
-        setShowPhoneModal(false);
       }
     };
 
-    const shouldLockBody = showEmailModal || showPhoneModal;
-
-    if (shouldLockBody) {
+    if (showEmailModal) {
       document.addEventListener("keydown", handleEscape);
       document.body.style.overflow = "hidden";
     } else {
@@ -241,15 +253,7 @@ export default function DashboardLayouts() {
       document.removeEventListener("keydown", handleEscape);
       document.body.style.overflow = "";
     };
-  }, [showEmailModal, showPhoneModal]);
-
-  useEffect(() => {
-    if (showPhoneModal && phoneInputRef.current) {
-      setTimeout(() => {
-        phoneInputRef.current?.focus();
-      }, 50);
-    }
-  }, [showPhoneModal]);
+  }, [showEmailModal]);
 
   const pageTitle = useMemo(() => {
     return getTitle(location.pathname, currentRole);
@@ -304,26 +308,8 @@ export default function DashboardLayouts() {
     setShowEmailModal(false);
   };
 
-  const handleOpenMicroSIP = () => {
-    if (typeof window === "undefined") return;
-
-    const cleanedNumber = sanitizePhoneValue(dialNumber);
-
-    if (!cleanedNumber) {
-      alert("Please enter a phone number or SIP extension.");
-      return;
-    }
-
-    const microsipUrl = `${MICROSIP_PROTOCOL}${cleanedNumber}`;
-
-    const link = document.createElement("a");
-    link.href = microsipUrl;
-    link.style.display = "none";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    setShowPhoneModal(false);
+  const handleOpenPhonePage = () => {
+    navigate("/dashboard/phone");
   };
 
   if (!token || !isKnownRole(currentRole)) {
@@ -371,13 +357,19 @@ export default function DashboardLayouts() {
 
           <button
             type="button"
-            onClick={() => setShowPhoneModal(true)}
-            title="Open MicroSIP"
-            aria-label="Open MicroSIP"
-            className="inline-flex items-center gap-2 rounded-full bg-[#1d4ed8] px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-[#1e40af] focus:outline-none focus:ring-2 focus:ring-[#60a5fa] focus:ring-offset-2"
+            onClick={handleOpenPhonePage}
+            title="Open Web Phone"
+            aria-label="Open Web Phone"
+            className={`inline-flex items-center gap-2 rounded-full px-4 py-3 text-sm font-semibold text-white shadow-lg transition focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+              isPhonePage
+                ? "bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-300"
+                : "bg-[#1d4ed8] hover:bg-[#1e40af] focus:ring-[#60a5fa]"
+            }`}
           >
             <PhoneCall className="h-5 w-5" />
-            <span className="hidden sm:inline">Call</span>
+            <span className="hidden sm:inline">
+              {isPhonePage ? "Phone Open" : "Call"}
+            </span>
           </button>
         </div>
 
@@ -421,75 +413,6 @@ export default function DashboardLayouts() {
                   className="rounded-xl bg-[#0f766e] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#115e59]"
                 >
                   Open Email
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {showPhoneModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4">
-            <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-              <button
-                type="button"
-                onClick={() => setShowPhoneModal(false)}
-                className="absolute right-4 top-4 rounded-full p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
-                aria-label="Close phone modal"
-              >
-                <X className="h-5 w-5" />
-              </button>
-
-              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-100">
-                <PhoneCall className="h-7 w-7 text-blue-700" />
-              </div>
-
-              <h2 className="text-xl font-bold text-slate-900">
-                Open MicroSIP Call
-              </h2>
-
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                Enter a phone number or SIP extension, then click{" "}
-                <span className="font-semibold">Call with MicroSIP</span>.
-              </p>
-
-              <div className="mt-5">
-                <label
-                  htmlFor="microsip-number"
-                  className="mb-2 block text-sm font-medium text-slate-700"
-                >
-                  Number or SIP extension
-                </label>
-                <input
-                  ref={phoneInputRef}
-                  id="microsip-number"
-                  type="text"
-                  value={dialNumber}
-                  onChange={(e) => setDialNumber(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      handleOpenMicroSIP();
-                    }
-                  }}
-                  placeholder="e.g. 1001 or +2507xxxxxxxx"
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-                />
-              </div>
-
-              <div className="mt-6 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowPhoneModal(false)}
-                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleOpenMicroSIP}
-                  className="rounded-xl bg-[#1d4ed8] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#1e40af]"
-                >
-                  Call with MicroSIP
                 </button>
               </div>
             </div>
