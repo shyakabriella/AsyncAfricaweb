@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  Mic,
   Phone,
   PhoneCall,
   PhoneIncoming,
   PhoneOff,
-  ShieldCheck,
 } from "lucide-react";
 import { SimpleUser } from "sip.js/lib/platform/web";
 
@@ -24,10 +22,23 @@ const SIP_USERNAME =
 const SIP_PASSWORD =
   import.meta.env.VITE_SIP_PASSWORD || "2001";
 
+const KEYS = [
+  { value: "1", letters: "" },
+  { value: "2", letters: "ABC" },
+  { value: "3", letters: "DEF" },
+  { value: "4", letters: "GHI" },
+  { value: "5", letters: "JKL" },
+  { value: "6", letters: "MNO" },
+  { value: "7", letters: "PQRS" },
+  { value: "8", letters: "TUV" },
+  { value: "9", letters: "WXYZ" },
+  { value: "*", letters: "" },
+  { value: "0", letters: "+" },
+  { value: "#", letters: "" },
+];
+
 function sanitizeDestination(value) {
-  return String(value || "")
-    .replace(/[^\d+#*A-Za-z._-]/g, "")
-    .trim();
+  return String(value || "").replace(/[^\d+#*A-Za-z._-]/g, "").trim();
 }
 
 function getReadableError(error) {
@@ -160,6 +171,18 @@ export default function WebPhone() {
     };
   }, []);
 
+  const appendToDestination = (value) => {
+    setDestination((prev) => `${prev}${value}`);
+  };
+
+  const handleBackspace = () => {
+    setDestination((prev) => prev.slice(0, -1));
+  };
+
+  const handleClear = () => {
+    setDestination("");
+  };
+
   const handleCall = async () => {
     const simpleUser = simpleUserRef.current;
     const cleanedDestination = sanitizeDestination(destination);
@@ -254,10 +277,10 @@ export default function WebPhone() {
   };
 
   return (
-    <div className="h-full">
+    <div className="h-full overflow-hidden">
       <div className="flex h-full flex-col rounded-[28px] border border-slate-200 bg-white px-4 py-4 shadow-sm">
         <div className="mb-3 flex items-center gap-3">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
             <Phone className="h-7 w-7" />
           </div>
 
@@ -289,52 +312,7 @@ export default function WebPhone() {
           </p>
         </div>
 
-        <div className="mb-3">
-          <label
-            htmlFor="destination"
-            className="mb-2 block text-sm font-medium text-slate-700"
-          >
-            Extension or Number
-          </label>
-
-          <input
-            id="destination"
-            type="text"
-            value={destination}
-            onChange={(e) => setDestination(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                handleCall();
-              }
-            }}
-            placeholder="1002"
-            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-center text-2xl font-semibold tracking-wide text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-          />
-        </div>
-
-        <div className="mb-4 grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={handleCall}
-            disabled={!isRegistered || isCalling || isInCall}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <PhoneCall className="h-4 w-4" />
-            Call
-          </button>
-
-          <button
-            type="button"
-            onClick={handleHangup}
-            disabled={!isCalling && !isInCall && !hasIncomingCall}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <PhoneOff className="h-4 w-4" />
-            Hangup
-          </button>
-        </div>
-
-        {hasIncomingCall && (
+        {hasIncomingCall ? (
           <div className="mb-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
             <div className="mb-3 flex items-center gap-2 text-emerald-700">
               <PhoneIncoming className="h-5 w-5" />
@@ -349,32 +327,94 @@ export default function WebPhone() {
               Answer
             </button>
           </div>
-        )}
+        ) : null}
 
-        <div className="mt-auto grid grid-cols-2 gap-3">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-            <div className="mb-2 flex items-center gap-2 text-blue-700">
-              <Mic className="h-4 w-4" />
-              <span className="text-xs font-semibold uppercase tracking-wide">
-                Audio
-              </span>
-            </div>
-            <p className="text-xs leading-5 text-slate-600">
-              Allow microphone access for calling.
-            </p>
-          </div>
+        <div className="mb-3">
+          <label
+            htmlFor="destination"
+            className="mb-2 block text-sm font-medium text-slate-700"
+          >
+            Extension or Number
+          </label>
 
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-            <div className="mb-2 flex items-center gap-2 text-violet-700">
-              <ShieldCheck className="h-4 w-4" />
-              <span className="text-xs font-semibold uppercase tracking-wide">
-                Secure
-              </span>
-            </div>
-            <p className="text-xs leading-5 text-slate-600">
-              Protected WebRTC browser calling.
+          <input
+            id="destination"
+            type="tel"
+            inputMode="tel"
+            autoComplete="off"
+            enterKeyHint="go"
+            value={destination}
+            onChange={(e) => setDestination(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                handleCall();
+              }
+            }}
+            placeholder="1002"
+            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-center text-3xl font-semibold tracking-[0.18em] text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+          />
+
+          <div className="mt-2 flex items-center justify-between px-1">
+            <button
+              type="button"
+              onClick={handleClear}
+              className="text-xs font-medium text-slate-500 transition hover:text-slate-700"
+            >
+              Clear
+            </button>
+
+            <p className="text-[11px] text-slate-400">
+              Tap numbers or use phone keypad
             </p>
+
+            <button
+              type="button"
+              onClick={handleBackspace}
+              className="text-xs font-medium text-slate-500 transition hover:text-slate-700"
+            >
+              ⌫
+            </button>
           </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2.5">
+          {KEYS.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              onClick={() => appendToDestination(item.value)}
+              className="flex h-14 flex-col items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-900 transition hover:bg-slate-100 active:scale-[0.98]"
+            >
+              <span className="text-xl font-semibold leading-none">
+                {item.value}
+              </span>
+              <span className="mt-1 text-[10px] uppercase tracking-[0.18em] text-slate-400">
+                {item.letters || "\u00A0"}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={handleCall}
+            disabled={!isRegistered || isCalling || isInCall}
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <PhoneCall className="h-4 w-4" />
+            Call
+          </button>
+
+          <button
+            type="button"
+            onClick={handleHangup}
+            disabled={!isCalling && !isInCall && !hasIncomingCall}
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <PhoneOff className="h-4 w-4" />
+            Hangup
+          </button>
         </div>
 
         {errorMessage ? (
