@@ -4,10 +4,17 @@ import NavHeader from "./NavHeader";
 
 export default function Layouts() {
   const location = useLocation();
+  const pathname = location.pathname;
+
+  const isWebPhonePage =
+    pathname === "/web-phone" ||
+    pathname === "/webphone" ||
+    pathname.startsWith("/web-phone/") ||
+    pathname.startsWith("/webphone/");
 
   useEffect(() => {
     window.scrollTo(0, 0);
-  }, [location.pathname]);
+  }, [pathname]);
 
   useEffect(() => {
     const html = document.documentElement;
@@ -34,6 +41,17 @@ export default function Layouts() {
       }
     };
   }, []);
+
+  // Special clean layout for web phone page
+  if (isWebPhonePage) {
+    return (
+      <div className="min-h-screen overflow-x-hidden bg-transparent text-inherit">
+        <main className="min-w-0 overflow-x-hidden">
+          <Outlet />
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col overflow-x-hidden bg-black text-white">
