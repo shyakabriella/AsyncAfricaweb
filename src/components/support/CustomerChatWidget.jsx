@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Headset, MessageCircle, PhoneCall, X } from "lucide-react";
 import echo from "../../lib/echo";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api";
 
 const STORAGE_KEY = "support_chat_token";
+const SUPPORT_PHONE_PATH =
+  import.meta.env.VITE_SUPPORT_PHONE_PATH || "/dashboard/phone";
 
 function dedupeMessages(list) {
   const map = new Map();
@@ -93,9 +96,12 @@ export default function CustomerChatWidget() {
 
   async function loadExistingConversation(existingToken) {
     try {
-      const res = await fetch(`${API_BASE_URL}/support-chat/session/${existingToken}`, {
-        headers: { Accept: "application/json" },
-      });
+      const res = await fetch(
+        `${API_BASE_URL}/support-chat/session/${existingToken}`,
+        {
+          headers: { Accept: "application/json" },
+        }
+      );
 
       if (!res.ok) {
         localStorage.removeItem(STORAGE_KEY);
@@ -108,6 +114,10 @@ export default function CustomerChatWidget() {
     } catch (error) {
       console.error("Failed to load existing support session", error);
     }
+  }
+
+  function handleOpenPhoneSupport() {
+    window.location.href = SUPPORT_PHONE_PATH;
   }
 
   async function handleSend(e) {
@@ -163,27 +173,86 @@ export default function CustomerChatWidget() {
   return (
     <div className="fixed bottom-5 right-5 z-50">
       {!isOpen ? (
-        <button
-          onClick={() => setIsOpen(true)}
-          className="rounded-full bg-blue-600 px-5 py-3 text-white shadow-lg"
-        >
-          Chat with us
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleOpenPhoneSupport}
+            className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg transition hover:bg-emerald-700"
+            title="Call Center Support"
+            aria-label="Open call center support"
+          >
+            <Headset className="h-6 w-6" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsOpen(true)}
+            className="inline-flex items-center gap-2 rounded-full bg-blue-600 px-5 py-3 text-white shadow-lg transition hover:bg-blue-700"
+          >
+            <MessageCircle className="h-5 w-5" />
+            <span>Chat with us</span>
+          </button>
+        </div>
       ) : (
         <div className="w-[350px] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl">
           <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
             <div>
               <h3 className="font-semibold">Customer Support</h3>
               <p className="text-xs text-gray-500">
-                {supportOnline ? "Agent online now" : "Agent offline — bot will help first"}
+                {supportOnline
+                  ? "Agent online now"
+                  : "Agent offline — bot will help first"}
               </p>
             </div>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="text-sm text-gray-500"
-            >
-              Close
-            </button>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleOpenPhoneSupport}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 transition hover:bg-emerald-200"
+                title="Open phone support"
+                aria-label="Open phone support"
+              >
+                <PhoneCall className="h-4 w-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition hover:bg-gray-200"
+                title="Close"
+                aria-label="Close support widget"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="border-b border-gray-100 bg-gradient-to-r from-blue-50 to-emerald-50 p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-600 text-white">
+                <Headset className="h-5 w-5" />
+              </div>
+
+              <div className="flex-1">
+                <h4 className="text-sm font-semibold text-gray-900">
+                  Call Center Support
+                </h4>
+                <p className="mt-1 text-xs leading-5 text-gray-600">
+                  Need faster help? Open the support phone dashboard and connect
+                  with customer support directly.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={handleOpenPhoneSupport}
+                  className="mt-3 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700"
+                >
+                  <PhoneCall className="h-4 w-4" />
+                  Open Phone Support
+                </button>
+              </div>
+            </div>
           </div>
 
           {!conversation && (
@@ -207,7 +276,7 @@ export default function CustomerChatWidget() {
 
           <div className="h-[360px] space-y-3 overflow-y-auto bg-gray-50 p-4">
             {messages.length === 0 ? (
-              <div className="rounded-xl bg-white p-3 text-sm text-gray-600">
+              <div className="rounded-xl border border-gray-200 bg-white p-3 text-sm text-gray-600">
                 Hello 👋 Send us your message and we will help you.
               </div>
             ) : (
@@ -219,13 +288,15 @@ export default function CustomerChatWidget() {
                 return (
                   <div
                     key={msg.id}
-                    className={`flex ${isCustomer ? "justify-end" : "justify-start"}`}
+                    className={`flex ${
+                      isCustomer ? "justify-end" : "justify-start"
+                    }`}
                   >
                     <div
                       className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${
                         isCustomer
                           ? "bg-blue-600 text-white"
-                          : "bg-white text-gray-800 border border-gray-200"
+                          : "border border-gray-200 bg-white text-gray-800"
                       }`}
                     >
                       <div className="mb-1 text-[11px] font-semibold opacity-70">
