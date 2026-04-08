@@ -7,7 +7,7 @@ const API_BASE_URL =
 
 const STORAGE_KEY = "support_chat_token";
 const SUPPORT_PHONE_PATH =
-  import.meta.env.VITE_SUPPORT_PHONE_PATH || "/dashboard/phone";
+  import.meta.env.VITE_SUPPORT_PHONE_PATH || "/support/phone";
 
 function dedupeMessages(list) {
   const map = new Map();
@@ -239,8 +239,8 @@ export default function CustomerChatWidget() {
                   Call Center Support
                 </h4>
                 <p className="mt-1 text-xs leading-5 text-gray-600">
-                  Need faster help? Open the support phone dashboard and connect
-                  with customer support directly.
+                  Need faster help? Open the support phone page and connect
+                  with customer support directly without login.
                 </p>
 
                 <button
