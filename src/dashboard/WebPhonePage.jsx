@@ -1,8 +1,19 @@
+import { Link } from "react-router-dom";
+import { House } from "lucide-react";
 import WebPhone from "../components/WebPhone";
 
 export default function WebPhonePage() {
   return (
-    <div className="flex min-h-[100svh] items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_top,_#dbeafe_0%,_#eef4ff_32%,_#f8fafc_65%,_#e2e8f0_100%)] px-4 py-4">
+    <div className="relative flex min-h-[100svh] items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_top,_#dbeafe_0%,_#eef4ff_32%,_#f8fafc_65%,_#e2e8f0_100%)] px-4 py-4">
+      {/* Back to website */}
+      <Link
+        to="/"
+        className="absolute left-4 top-4 z-30 inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/95 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-md backdrop-blur transition hover:bg-white hover:text-slate-900"
+      >
+        <House className="h-4 w-4" />
+        Back to website
+      </Link>
+
       <div className="relative w-[312px] sm:w-[330px]">
         {/* side buttons */}
         <div className="absolute -left-[4px] top-24 h-12 w-[4px] rounded-full bg-slate-700/70" />
