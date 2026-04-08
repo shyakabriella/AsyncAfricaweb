@@ -15,10 +15,37 @@ const SIP_USERNAME =
   import.meta.env.VITE_SIP_USERNAME || "2001";
 
 const SIP_PASSWORD =
-  import.meta.env.VITE_SIP_PASSWORD || "StrongPassword2001";
+  import.meta.env.VITE_SIP_PASSWORD || "2001";
 
 function sanitizeDestination(value) {
   return String(value || "").replace(/[^\d+#*A-Za-z._-]/g, "").trim();
+}
+
+function getReadableError(error) {
+  const name = error?.name || "UnknownError";
+  const message = error?.message || "Unknown browser/media error";
+
+  if (name === "NotAllowedError") {
+    return "Microphone permission was denied on this phone/browser.";
+  }
+
+  if (name === "NotFoundError") {
+    return "No microphone was found on this phone.";
+  }
+
+  if (name === "NotReadableError") {
+    return "The microphone is busy or could not be opened.";
+  }
+
+  if (name === "OverconstrainedError") {
+    return "The requested audio device settings are not supported on this phone.";
+  }
+
+  if (name === "SecurityError") {
+    return "Browser security blocked microphone access.";
+  }
+
+  return `${name}: ${message}`;
 }
 
 export default function WebPhone() {
@@ -44,6 +71,10 @@ export default function WebPhone() {
         const simpleUser = new SimpleUser(SIP_WSS_URL, {
           aor: SIP_AOR,
           media: {
+            constraints: {
+              audio: true,
+              video: false,
+            },
             remote: {
               audio: remoteAudioRef.current,
             },
@@ -61,13 +92,21 @@ export default function WebPhone() {
             setIsCalling(false);
             setStatus("Incoming call");
           },
+
           onCallAnswered: async () => {
             if (!isMounted) return;
             setHasIncomingCall(false);
             setIsCalling(false);
             setIsInCall(true);
             setStatus("Call active");
+
+            try {
+              await remoteAudioRef.current?.play?.();
+            } catch (e) {
+              console.warn("Remote audio play warning:", e);
+            }
           },
+
           onCallHangup: async () => {
             if (!isMounted) return;
             setHasIncomingCall(false);
@@ -87,6 +126,7 @@ export default function WebPhone() {
         setStatus("Registered");
       } catch (error) {
         console.error("Web phone setup failed:", error);
+
         if (!isMounted) return;
 
         setIsRegistered(false);
@@ -128,15 +168,32 @@ export default function WebPhone() {
     try {
       setErrorMessage("");
       setIsCalling(true);
+      setStatus(`Preparing microphone...`);
+
+      // Mobile-safe permission + microphone warmup
+      const tempStream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: false,
+      });
+
+      // stop warmup stream; SIP.js will open its own stream for the call
+      tempStream.getTracks().forEach((track) => track.stop());
+
       setStatus(`Calling ${cleanedDestination}...`);
 
       await simpleUser.call(`sip:${cleanedDestination}@${SIP_DOMAIN}`);
+
+      try {
+        await remoteAudioRef.current?.play?.();
+      } catch (e) {
+        console.warn("Remote audio play warning after call:", e);
+      }
     } catch (error) {
       console.error("Call failed:", error);
       setIsCalling(false);
       setIsInCall(false);
       setStatus("Call failed");
-      setErrorMessage("Failed to place the call.");
+      setErrorMessage(getReadableError(error));
     }
   };
 
@@ -154,10 +211,16 @@ export default function WebPhone() {
       setHasIncomingCall(false);
       setIsInCall(true);
       setStatus("Call active");
+
+      try {
+        await remoteAudioRef.current?.play?.();
+      } catch (e) {
+        console.warn("Remote audio play warning on answer:", e);
+      }
     } catch (error) {
       console.error("Answer failed:", error);
       setStatus("Answer failed");
-      setErrorMessage("Could not answer the call.");
+      setErrorMessage(getReadableError(error));
     }
   };
 
@@ -179,7 +242,7 @@ export default function WebPhone() {
     } catch (error) {
       console.error("Hangup failed:", error);
       setStatus("Hangup failed");
-      setErrorMessage("Could not hang up the call.");
+      setErrorMessage(getReadableError(error));
     }
   };
 
@@ -290,20 +353,9 @@ export default function WebPhone() {
         <h3 className="text-lg font-bold text-slate-900">Phone Setup Notes</h3>
 
         <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
-          <p>
-            This page is the first browser-phone version for AsyncAfrica.
-          </p>
-          <p>
-            It needs a working Asterisk WebRTC setup with WSS enabled.
-          </p>
-          <p>
-            Update the SIP values with your real extension details, or later
-            load them from your backend after login.
-          </p>
-          <p>
-            When your server is ready, users can call directly from the website
-            without installing MicroSIP.
-          </p>
+          <p>This page is the first browser-phone version for AsyncAfrica.</p>
+          <p>It needs a working Asterisk WebRTC setup with WSS enabled.</p>
+          <p>Update the SIP values with your real extension details.</p>
         </div>
 
         <audio ref={remoteAudioRef} autoPlay />
