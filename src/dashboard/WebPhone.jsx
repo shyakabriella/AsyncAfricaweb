@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Circle,
+  Delete,
+  Headset,
   Phone,
   PhoneCall,
   PhoneIncoming,
   PhoneOff,
-  Delete,
-  Headset,
 } from "lucide-react";
 import { SimpleUser } from "sip.js/lib/platform/web";
 
@@ -326,15 +326,21 @@ export default function WebPhone() {
             <div className="min-w-0">
               <div className="mb-1 flex items-center gap-2">
                 <h2 className="text-xl font-bold text-slate-900">Web Phone</h2>
+
                 {isRegistered ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700">
-                    <Circle className="h-2.5 w-2.5 fill-emerald-500 text-emerald-500" />
-                    Connected
+                  <span
+                    className="inline-flex items-center"
+                    title="Connected"
+                    aria-label="Connected"
+                  >
+                    <Circle className="h-3.5 w-3.5 fill-emerald-500 text-emerald-500" />
                   </span>
                 ) : null}
               </div>
 
-              <p className="text-sm text-slate-600">{status}</p>
+              <p className="text-sm text-slate-600">
+                {isInCall ? "In call" : status}
+              </p>
             </div>
           </div>
 
