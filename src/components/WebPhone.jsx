@@ -83,6 +83,7 @@ export default function WebPhone() {
   const [errorMessage, setErrorMessage] = useState("");
   const [callSeconds, setCallSeconds] = useState(0);
   const [clock, setClock] = useState(() => formatClock(new Date()));
+  const [showCallCenterGuide, setShowCallCenterGuide] = useState(true);
 
   const simpleUserRef = useRef(null);
   const remoteAudioRef = useRef(null);
@@ -126,6 +127,7 @@ export default function WebPhone() {
             setHasIncomingCall(true);
             setIsCalling(false);
             setStatus("Incoming");
+            setShowCallCenterGuide(false);
           },
 
           onCallAnswered: async () => {
@@ -135,6 +137,7 @@ export default function WebPhone() {
             setIsInCall(true);
             setCallSeconds(0);
             setStatus("Active");
+            setShowCallCenterGuide(false);
 
             try {
               await remoteAudioRef.current?.play?.();
@@ -199,10 +202,12 @@ export default function WebPhone() {
   const appendToDestination = (value) => {
     setDestination((prev) => `${prev}${value}`);
     setErrorMessage("");
+    setShowCallCenterGuide(false);
   };
 
   const handleBackspace = () => {
     setDestination((prev) => prev.slice(0, -1));
+    setShowCallCenterGuide(false);
   };
 
   const handleClear = () => {
@@ -213,6 +218,7 @@ export default function WebPhone() {
   const handleSetCallCenter = () => {
     setDestination(CALL_CENTER_EXTENSION);
     setErrorMessage("");
+    setShowCallCenterGuide(false);
   };
 
   const handleCall = async () => {
@@ -234,6 +240,7 @@ export default function WebPhone() {
       setIsCalling(true);
       setCallSeconds(0);
       setStatus("Calling");
+      setShowCallCenterGuide(false);
 
       const tempStream = await navigator.mediaDevices.getUserMedia({
         audio: true,
@@ -274,6 +281,7 @@ export default function WebPhone() {
       setHasIncomingCall(false);
       setIsInCall(true);
       setStatus("Active");
+      setShowCallCenterGuide(false);
 
       try {
         await remoteAudioRef.current?.play?.();
@@ -379,14 +387,32 @@ export default function WebPhone() {
       </div>
 
       <div className="mb-3 grid grid-cols-[1fr_auto] gap-2">
-        <button
-          type="button"
-          onClick={handleSetCallCenter}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-blue-50 px-4 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
-        >
-          <Headset className="h-4 w-4" />
-          Call Center
-        </button>
+        <div className="relative">
+          {showCallCenterGuide && !isCalling && !isInCall && !hasIncomingCall ? (
+            <>
+              <div className="pointer-events-none absolute -top-14 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-2xl bg-slate-900 px-3 py-2 text-[11px] font-semibold text-white shadow-lg">
+                Tap here for support
+              </div>
+
+              <div className="pointer-events-none absolute -top-5 left-1/2 z-20 -translate-x-1/2 text-2xl animate-bounce">
+                👇
+              </div>
+            </>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={handleSetCallCenter}
+            className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl px-4 text-sm font-semibold transition ${
+              showCallCenterGuide && !isCalling && !isInCall && !hasIncomingCall
+                ? "bg-blue-600 text-white ring-2 ring-blue-300 shadow-[0_0_0_6px_rgba(59,130,246,0.15)] hover:bg-blue-700"
+                : "bg-blue-50 text-blue-700 hover:bg-blue-100"
+            }`}
+          >
+            <Headset className="h-4 w-4" />
+            Call Center
+          </button>
+        </div>
 
         <button
           type="button"
