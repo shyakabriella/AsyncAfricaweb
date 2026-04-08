@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  Circle,
   Phone,
   PhoneCall,
   PhoneIncoming,
   PhoneOff,
+  Delete,
+  Headset,
 } from "lucide-react";
 import { SimpleUser } from "sip.js/lib/platform/web";
 
@@ -22,7 +25,9 @@ const SIP_USERNAME =
 const SIP_PASSWORD =
   import.meta.env.VITE_SIP_PASSWORD || "2001";
 
-const KEYS = [
+const CALL_CENTER_EXTENSION = "1002";
+
+const DIAL_KEYS = [
   { value: "1", letters: "" },
   { value: "2", letters: "ABC" },
   { value: "3", letters: "DEF" },
@@ -38,7 +43,9 @@ const KEYS = [
 ];
 
 function sanitizeDestination(value) {
-  return String(value || "").replace(/[^\d+#*A-Za-z._-]/g, "").trim();
+  return String(value || "")
+    .replace(/[^\d+#*A-Za-z._-]/g, "")
+    .trim();
 }
 
 function getReadableError(error) {
@@ -68,14 +75,25 @@ function getReadableError(error) {
   return `${name}: ${message}`;
 }
 
+function formatDuration(totalSeconds) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(
+    2,
+    "0"
+  )}`;
+}
+
 export default function WebPhone() {
-  const [destination, setDestination] = useState("1002");
+  const [destination, setDestination] = useState(CALL_CENTER_EXTENSION);
   const [status, setStatus] = useState("Connecting...");
   const [isRegistered, setIsRegistered] = useState(false);
   const [isCalling, setIsCalling] = useState(false);
   const [isInCall, setIsInCall] = useState(false);
   const [hasIncomingCall, setHasIncomingCall] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [callSeconds, setCallSeconds] = useState(0);
 
   const simpleUserRef = useRef(null);
   const remoteAudioRef = useRef(null);
@@ -118,6 +136,7 @@ export default function WebPhone() {
             setHasIncomingCall(false);
             setIsCalling(false);
             setIsInCall(true);
+            setCallSeconds(0);
             setStatus("Call active");
 
             try {
@@ -132,6 +151,7 @@ export default function WebPhone() {
             setHasIncomingCall(false);
             setIsCalling(false);
             setIsInCall(false);
+            setCallSeconds(0);
             setStatus("Call ended");
           },
         };
@@ -143,7 +163,7 @@ export default function WebPhone() {
 
         simpleUserRef.current = simpleUser;
         setIsRegistered(true);
-        setStatus("Registered");
+        setStatus("Ready");
       } catch (error) {
         console.error("Web phone setup failed:", error);
 
@@ -171,6 +191,16 @@ export default function WebPhone() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!isInCall) return;
+
+    const interval = window.setInterval(() => {
+      setCallSeconds((prev) => prev + 1);
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [isInCall]);
+
   const appendToDestination = (value) => {
     setDestination((prev) => `${prev}${value}`);
   };
@@ -181,6 +211,11 @@ export default function WebPhone() {
 
   const handleClear = () => {
     setDestination("");
+  };
+
+  const handleSetCallCenter = () => {
+    setDestination(CALL_CENTER_EXTENSION);
+    setErrorMessage("");
   };
 
   const handleCall = async () => {
@@ -200,6 +235,7 @@ export default function WebPhone() {
     try {
       setErrorMessage("");
       setIsCalling(true);
+      setCallSeconds(0);
       setStatus("Preparing microphone...");
 
       const tempStream = await navigator.mediaDevices.getUserMedia({
@@ -210,7 +246,6 @@ export default function WebPhone() {
       tempStream.getTracks().forEach((track) => track.stop());
 
       setStatus(`Calling ${cleanedDestination}...`);
-
       await simpleUser.call(`sip:${cleanedDestination}@${SIP_DOMAIN}`);
 
       try {
@@ -222,6 +257,7 @@ export default function WebPhone() {
       console.error("Call failed:", error);
       setIsCalling(false);
       setIsInCall(false);
+      setCallSeconds(0);
       setStatus("Call failed");
       setErrorMessage(getReadableError(error));
     }
@@ -237,6 +273,7 @@ export default function WebPhone() {
 
     try {
       setErrorMessage("");
+      setCallSeconds(0);
       await simpleUser.answer();
       setHasIncomingCall(false);
       setIsInCall(true);
@@ -268,6 +305,7 @@ export default function WebPhone() {
       setHasIncomingCall(false);
       setIsCalling(false);
       setIsInCall(false);
+      setCallSeconds(0);
       setStatus("Hung up");
     } catch (error) {
       console.error("Hangup failed:", error);
@@ -278,38 +316,36 @@ export default function WebPhone() {
 
   return (
     <div className="h-full overflow-hidden">
-      <div className="flex h-full flex-col rounded-[28px] border border-slate-200 bg-white px-4 py-4 shadow-sm">
-        <div className="mb-3 flex items-center gap-3">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
-            <Phone className="h-7 w-7" />
+      <div className="flex h-full flex-col rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
+              <Phone className="h-7 w-7" />
+            </div>
+
+            <div className="min-w-0">
+              <div className="mb-1 flex items-center gap-2">
+                <h2 className="text-xl font-bold text-slate-900">Web Phone</h2>
+                {isRegistered ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700">
+                    <Circle className="h-2.5 w-2.5 fill-emerald-500 text-emerald-500" />
+                    Connected
+                  </span>
+                ) : null}
+              </div>
+
+              <p className="text-sm text-slate-600">{status}</p>
+            </div>
           </div>
 
-          <div className="min-w-0">
-            <h2 className="text-xl font-bold text-slate-900">Web Phone</h2>
-            <p className="text-sm text-slate-600">Status: {status}</p>
+          <div className="rounded-2xl bg-slate-100 px-3 py-2 text-right">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+              Time
+            </p>
+            <p className="text-base font-bold text-slate-900">
+              {formatDuration(callSeconds)}
+            </p>
           </div>
-        </div>
-
-        <div className="mb-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <span className="text-sm font-medium text-slate-700">
-              Registration
-            </span>
-
-            <span
-              className={`rounded-full px-3 py-1 text-[11px] font-semibold ${
-                isRegistered
-                  ? "bg-emerald-100 text-emerald-700"
-                  : "bg-amber-100 text-amber-700"
-              }`}
-            >
-              {isRegistered ? "Connected" : "Not connected"}
-            </span>
-          </div>
-
-          <p className="truncate text-xs text-slate-600">
-            SIP: <span className="font-semibold">{SIP_AOR}</span>
-          </p>
         </div>
 
         {hasIncomingCall ? (
@@ -351,44 +387,52 @@ export default function WebPhone() {
               }
             }}
             placeholder="1002"
-            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-center text-3xl font-semibold tracking-[0.18em] text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-center text-3xl font-semibold tracking-[0.16em] text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
           />
 
-          <div className="mt-2 flex items-center justify-between px-1">
+          <div className="mt-2 flex items-center justify-between gap-2">
             <button
               type="button"
-              onClick={handleClear}
-              className="text-xs font-medium text-slate-500 transition hover:text-slate-700"
+              onClick={handleSetCallCenter}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
             >
-              Clear
+              <Headset className="h-4 w-4" />
+              Call Center {CALL_CENTER_EXTENSION}
             </button>
 
-            <p className="text-[11px] text-slate-400">
-              Tap numbers or use phone keypad
-            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleClear}
+                className="rounded-xl px-3 py-2 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+              >
+                Clear
+              </button>
 
-            <button
-              type="button"
-              onClick={handleBackspace}
-              className="text-xs font-medium text-slate-500 transition hover:text-slate-700"
-            >
-              ⌫
-            </button>
+              <button
+                type="button"
+                onClick={handleBackspace}
+                className="inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+              >
+                <Delete className="h-4 w-4" />
+                Delete
+              </button>
+            </div>
           </div>
         </div>
 
         <div className="grid grid-cols-3 gap-2.5">
-          {KEYS.map((item) => (
+          {DIAL_KEYS.map((item) => (
             <button
               key={item.value}
               type="button"
               onClick={() => appendToDestination(item.value)}
-              className="flex h-14 flex-col items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-900 transition hover:bg-slate-100 active:scale-[0.98]"
+              className="flex h-12 flex-col items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-900 transition hover:bg-slate-100 active:scale-[0.98]"
             >
-              <span className="text-xl font-semibold leading-none">
+              <span className="text-lg font-semibold leading-none">
                 {item.value}
               </span>
-              <span className="mt-1 text-[10px] uppercase tracking-[0.18em] text-slate-400">
+              <span className="mt-1 text-[9px] uppercase tracking-[0.18em] text-slate-400">
                 {item.letters || "\u00A0"}
               </span>
             </button>
