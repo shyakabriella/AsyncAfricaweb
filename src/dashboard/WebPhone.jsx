@@ -3,7 +3,6 @@ import {
   Circle,
   Delete,
   Headset,
-  Phone,
   PhoneCall,
   PhoneIncoming,
   PhoneOff,
@@ -48,25 +47,14 @@ function getReadableError(error) {
   const name = error?.name || "UnknownError";
   const message = error?.message || "Unknown browser/media error";
 
-  if (name === "NotAllowedError") {
-    return "Microphone permission was denied.";
-  }
-
-  if (name === "NotFoundError") {
-    return "No microphone was found.";
-  }
-
-  if (name === "NotReadableError") {
+  if (name === "NotAllowedError") return "Microphone permission was denied.";
+  if (name === "NotFoundError") return "No microphone was found.";
+  if (name === "NotReadableError")
     return "The microphone is busy or could not be opened.";
-  }
-
-  if (name === "OverconstrainedError") {
+  if (name === "OverconstrainedError")
     return "The requested audio settings are not supported.";
-  }
-
-  if (name === "SecurityError") {
+  if (name === "SecurityError")
     return "Browser security blocked microphone access.";
-  }
 
   return `${name}: ${message}`;
 }
@@ -105,7 +93,7 @@ export default function WebPhone() {
   useEffect(() => {
     const interval = window.setInterval(() => {
       setClock(formatClock(new Date()));
-    }, 1000 * 20);
+    }, 20000);
 
     return () => window.clearInterval(interval);
   }, []);
@@ -184,7 +172,7 @@ export default function WebPhone() {
         setIsRegistered(false);
         setStatus("Offline");
         setErrorMessage(
-          "Could not connect the phone. Check WSS, SIP account, and Asterisk WebRTC settings."
+          "Could not connect the phone. Please try again later."
         );
       }
     };
@@ -222,6 +210,11 @@ export default function WebPhone() {
     setDestination((prev) => prev.slice(0, -1));
   };
 
+  const handleClear = () => {
+    setDestination("");
+    setErrorMessage("");
+  };
+
   const handleSetCallCenter = () => {
     setDestination(CALL_CENTER_EXTENSION);
     setErrorMessage("");
@@ -245,7 +238,7 @@ export default function WebPhone() {
       setErrorMessage("");
       setIsCalling(true);
       setCallSeconds(0);
-      setStatus("Mic...");
+      setStatus("Calling");
 
       const tempStream = await navigator.mediaDevices.getUserMedia({
         audio: true,
@@ -254,7 +247,6 @@ export default function WebPhone() {
 
       tempStream.getTracks().forEach((track) => track.stop());
 
-      setStatus("Calling");
       await simpleUser.call(`sip:${cleanedDestination}@${SIP_DOMAIN}`);
 
       try {
@@ -370,7 +362,7 @@ export default function WebPhone() {
         </div>
       ) : null}
 
-      {/* top display */}
+      {/* main display */}
       <div className="mb-3 flex min-h-[120px] flex-col items-center justify-center rounded-[26px] bg-white/90 px-4 text-center shadow-sm">
         <div className="mb-2 flex items-center gap-2">
           <span
@@ -403,7 +395,7 @@ export default function WebPhone() {
         </div>
 
         <div className="mt-2 text-sm font-medium text-slate-500">
-          {isInCall ? formatDuration(callSeconds) : status}
+          {isInCall ? formatDuration(callSeconds) : ""}
         </div>
       </div>
 
@@ -450,7 +442,7 @@ export default function WebPhone() {
       <div className="mt-4 grid grid-cols-3 gap-3">
         <button
           type="button"
-          onClick={() => setDestination("")}
+          onClick={handleClear}
           className="inline-flex h-12 items-center justify-center rounded-full bg-slate-200 px-4 text-xs font-semibold text-slate-700 transition hover:bg-slate-300"
         >
           Clear
@@ -475,7 +467,7 @@ export default function WebPhone() {
         </button>
       </div>
 
-      {/* error */}
+      {/* customer-safe error */}
       {errorMessage ? (
         <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-center text-[11px] leading-5 text-red-700">
           {errorMessage}
