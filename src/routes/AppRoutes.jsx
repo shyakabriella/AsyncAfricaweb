@@ -99,6 +99,7 @@ export default function AppRoutes() {
     location.pathname === "/register" ||
     location.pathname === "/forgot-password" ||
     location.pathname === "/reset-password" ||
+    location.pathname === "/support/phone" ||
     location.pathname.startsWith("/dashboard");
 
   return (
@@ -115,6 +116,10 @@ export default function AppRoutes() {
           <Route path="projects" element={<Projects />} />
           <Route path="contact" element={<Contact />} />
         </Route>
+
+        {/* Public customer support phone page - no login required */}
+        <Route path="/support/phone" element={<WebPhonePage />} />
+        <Route path="/support/call" element={<Navigate to="/support/phone" replace />} />
 
         <Route
           path="/login"
@@ -311,6 +316,7 @@ export default function AppRoutes() {
             }
           />
 
+          {/* Internal/staff phone route - still protected */}
           <Route
             path="phone"
             element={
