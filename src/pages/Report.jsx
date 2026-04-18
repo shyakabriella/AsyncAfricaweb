@@ -173,19 +173,15 @@ export default function Report() {
       filterRows(
         data.trainerAttendances,
         filters,
-        (item) => [
-          item?.trainer?.name,
-          item?.trainer?.email,
-          item?.status,
-        ],
+        (item) => [item?.trainer?.name, item?.trainer?.email, item?.status],
         (item) => item?.attendance_date || item?.created_at
       ),
     [data.trainerAttendances, filters]
   );
 
   const applicationProgramGroups = useMemo(
-    () => groupApplicationsByProgram(filteredApplications),
-    [filteredApplications]
+    () => groupApplicationsByProgram(filteredApplications, data.programs),
+    [filteredApplications, data.programs]
   );
 
   const reportSections = useMemo(() => {
@@ -295,6 +291,27 @@ export default function Report() {
   const exportPdf = () => {
     window.print();
   };
+
+  const selectedProgramStats = useMemo(() => {
+    if (activeSection !== "applications" || !selectedItem) {
+      return {
+        price: 0,
+        total: 0,
+        acceptedCount: 0,
+        totalEarned: 0,
+      };
+    }
+
+    const acceptedCount = toNumber(selectedItem?.statusCounts?.accepted || 0);
+    const price = toNumber(selectedItem?.price || 0);
+
+    return {
+      price,
+      total: toNumber(selectedItem?.count || 0),
+      acceptedCount,
+      totalEarned: acceptedCount * price,
+    };
+  }, [activeSection, selectedItem]);
 
   return (
     <div className="space-y-6 bg-white print:space-y-0">
@@ -464,6 +481,7 @@ export default function Report() {
                 statuses={applicationStatuses}
                 rows={filteredProgramApplications}
                 onExport={exportPdf}
+                stats={selectedProgramStats}
               />
             ) : (
               <OpenedReport sectionKey={activeSection} item={selectedItem} />
@@ -482,22 +500,30 @@ export default function Report() {
               <h1 className="mt-2 text-2xl font-extrabold text-slate-900">
                 {selectedItem?.title || "Program Applications"}
               </h1>
-              <div className="mt-2 flex flex-wrap gap-4 text-sm text-slate-600">
-                <span>
-                  Status:{" "}
-                  <strong>
-                    {applicationStatusFilter === "all"
-                      ? "All"
-                      : formatStatusLabel(applicationStatusFilter)}
-                  </strong>
-                </span>
-                <span>
-                  Total Rows:{" "}
-                  <strong>{formatNumber(filteredProgramApplications.length)}</strong>
-                </span>
-                <span>
-                  Printed: <strong>{new Date().toLocaleDateString()}</strong>
-                </span>
+
+              <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-700">
+                <div className="rounded-xl border border-slate-300 px-3 py-2">
+                  <span className="font-semibold">Program Fee:</span>{" "}
+                  {formatMoney(selectedProgramStats.price)}
+                </div>
+                <div className="rounded-xl border border-slate-300 px-3 py-2">
+                  <span className="font-semibold">Accepted Students:</span>{" "}
+                  {formatNumber(selectedProgramStats.acceptedCount)}
+                </div>
+                <div className="rounded-xl border border-slate-300 px-3 py-2">
+                  <span className="font-semibold">Total Earned:</span>{" "}
+                  {formatMoney(selectedProgramStats.totalEarned)}
+                </div>
+                <div className="rounded-xl border border-slate-300 px-3 py-2">
+                  <span className="font-semibold">Status Filter:</span>{" "}
+                  {applicationStatusFilter === "all"
+                    ? "All"
+                    : formatStatusLabel(applicationStatusFilter)}
+                </div>
+              </div>
+
+              <div className="mt-3 text-sm text-slate-600">
+                Printed: <strong>{new Date().toLocaleDateString()}</strong>
               </div>
             </div>
 
@@ -639,10 +665,10 @@ function ApplicationProgramCard({ item }) {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <MiniMetric label="Pending" value={item?.statusCounts?.pending || 0} />
+        <MiniMetric label="Fee" value={formatMoney(item?.price || 0)} />
         <MiniMetric label="Accepted" value={item?.statusCounts?.accepted || 0} />
-        <MiniMetric label="Rejected" value={item?.statusCounts?.rejected || 0} />
-        <MiniMetric label="Reviewed" value={item?.statusCounts?.reviewed || 0} />
+        <MiniMetric label="Earned" value={formatMoney(item?.totalEarned || 0)} />
+        <MiniMetric label="Pending" value={item?.statusCounts?.pending || 0} />
       </div>
 
       <p className="text-xs font-medium text-indigo-600">
@@ -659,6 +685,7 @@ function ApplicationProgramDetail({
   statuses,
   rows,
   onExport,
+  stats,
 }) {
   return (
     <div className="space-y-6">
@@ -683,31 +710,44 @@ function ApplicationProgramDetail({
           </button>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
-          <DetailMetric label="All" value={group?.count || 0} />
+        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          <DetailMetric label="Program Fee" value={formatMoney(stats.price)} />
+          <DetailMetric label="All Students" value={formatNumber(stats.total)} />
+          <DetailMetric
+            label="Accepted Students"
+            value={formatNumber(stats.acceptedCount)}
+          />
+          <DetailMetric
+            label="Total Earned"
+            value={formatMoney(stats.totalEarned)}
+          />
           <DetailMetric label="Pending" value={group?.statusCounts?.pending || 0} />
-          <DetailMetric label="Accepted" value={group?.statusCounts?.accepted || 0} />
           <DetailMetric label="Rejected" value={group?.statusCounts?.rejected || 0} />
-          <DetailMetric label="Reviewed" value={group?.statusCounts?.reviewed || 0} />
-          <DetailMetric label="Waitlisted" value={group?.statusCounts?.waitlisted || 0} />
         </div>
       </div>
 
       <div className="flex flex-wrap gap-2 print:hidden">
-        {statuses.map((status) => (
-          <button
-            key={status}
-            type="button"
-            onClick={() => setStatusFilter(status)}
-            className={`rounded-full px-4 py-2 text-sm font-bold transition ${
-              statusFilter === status
-                ? "bg-indigo-600 text-white"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-            }`}
-          >
-            {status === "all" ? "All" : formatStatusLabel(status)}
-          </button>
-        ))}
+        {statuses.map((status) => {
+          const count =
+            status === "all"
+              ? toNumber(group?.count || 0)
+              : toNumber(group?.statusCounts?.[status] || 0);
+
+          return (
+            <button
+              key={status}
+              type="button"
+              onClick={() => setStatusFilter(status)}
+              className={`rounded-full px-4 py-2 text-sm font-bold transition ${
+                statusFilter === status
+                  ? "bg-indigo-600 text-white"
+                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+              }`}
+            >
+              {status === "all" ? "All" : formatStatusLabel(status)} ({formatNumber(count)})
+            </button>
+          );
+        })}
       </div>
 
       <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white print:hidden">
@@ -1105,7 +1145,8 @@ function filterRows(rows, filters, getFields, getDate) {
   });
 }
 
-function groupApplicationsByProgram(applications) {
+function groupApplicationsByProgram(applications, programs) {
+  const programLookup = createProgramLookup(programs);
   const map = new Map();
 
   applications.forEach((item) => {
@@ -1135,6 +1176,8 @@ function groupApplicationsByProgram(applications) {
         count: 0,
         applications: [],
         statusCounts: {},
+        price: 0,
+        totalEarned: 0,
       });
     }
 
@@ -1146,9 +1189,51 @@ function groupApplicationsByProgram(applications) {
     group.statusCounts[status] = (group.statusCounts[status] || 0) + 1;
   });
 
-  return Array.from(map.values()).sort((a, b) =>
-    a.title.localeCompare(b.title)
-  );
+  const groups = Array.from(map.values()).map((group) => {
+    const matchedProgram =
+      programLookup.byId.get(String(group.id)) ||
+      programLookup.bySlug.get(String(group.id).toLowerCase()) ||
+      programLookup.byTitle.get(normalizeText(group.title));
+
+    const price = toNumber(matchedProgram?.price || 0);
+    const acceptedCount = toNumber(group?.statusCounts?.accepted || 0);
+
+    return {
+      ...group,
+      price,
+      acceptedCount,
+      totalEarned: acceptedCount * price,
+    };
+  });
+
+  return groups.sort((a, b) => a.title.localeCompare(b.title));
+}
+
+function createProgramLookup(programs) {
+  const byId = new Map();
+  const bySlug = new Map();
+  const byTitle = new Map();
+
+  programs.forEach((program) => {
+    if (program?.id !== undefined && program?.id !== null) {
+      byId.set(String(program.id), program);
+    }
+
+    if (program?.slug) {
+      bySlug.set(String(program.slug).toLowerCase(), program);
+    }
+
+    const names = [program?.name, program?.title, program?.program_title];
+    names.filter(Boolean).forEach((name) => {
+      byTitle.set(normalizeText(name), program);
+    });
+  });
+
+  return { byId, bySlug, byTitle };
+}
+
+function normalizeText(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
 function normalizeStatus(value) {
@@ -1169,6 +1254,10 @@ function toNumber(value) {
 
 function formatNumber(value) {
   return new Intl.NumberFormat().format(toNumber(value));
+}
+
+function formatMoney(value, currency = "RWF") {
+  return `${formatNumber(value)} ${currency}`;
 }
 
 function formatDate(value) {
