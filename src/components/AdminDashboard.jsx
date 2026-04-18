@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
+import { clearStoredAuth, getAuthState } from "../lib/auth";
 
-const API_BASE = (
-  import.meta.env.VITE_API_URL ||
-  import.meta.env.VITE_API_BASE_URL ||
-  import.meta.env.VITE_APP_API_URL ||
-  "http://127.0.0.1:8000/api"
-).replace(/\/+$/, "");
+const API_BASE =
+  (
+    import.meta.env.VITE_API_URL ||
+    import.meta.env.VITE_API_BASE_URL ||
+    import.meta.env.VITE_APP_API_URL ||
+    "http://127.0.0.1:8000/api"
+  ).replace(/\/+$/, "");
 
 const EMPTY_DASHBOARD = {
   stats: {
@@ -54,6 +56,11 @@ const EMPTY_DASHBOARD = {
     totalCommission: 0,
     expectedCommission: 0,
   },
+  extra: {
+    fullShifts: 0,
+    totalCapacity: 0,
+    totalFilled: 0,
+  },
 };
 
 export default function AdminDashboard() {
@@ -68,21 +75,21 @@ export default function AdminDashboard() {
         title: "Total Programs",
         value: formatNumber(dashboard.stats.totalPrograms),
         badge: `${formatNumber(dashboard.stats.activePrograms)} Active`,
-        note: "Programs from ProgramController",
+        note: "Live from programs",
         icon: <IconProgram />,
       },
       {
         title: "Applications",
         value: formatNumber(dashboard.stats.totalApplications),
         badge: `${formatNumber(dashboard.stats.pendingApplications)} Pending`,
-        note: "Applications from ProgramApplicationController",
+        note: "Live from applications",
         icon: <IconApplication />,
       },
       {
         title: "Agents",
         value: formatNumber(dashboard.stats.totalAgents),
         badge: `${formatNumber(dashboard.stats.activeAgents)} Active`,
-        note: "Agents from AgentController",
+        note: "Live from agents",
         icon: <IconUsers />,
       },
       {
@@ -110,20 +117,26 @@ export default function AdminDashboard() {
         setLoading(true);
       }
 
-      const [programsRes, applicationsRes, agentsRes, attendancesRes, trainerRes] =
-        await Promise.all([
-          apiGet("/programs"),
-          apiGet("/applications?per_page=100"),
-          apiGet("/agents"),
-          apiGet("/attendances"),
-          apiGet("/trainer-attendances"),
-        ]);
+      const [
+        programsRes,
+        applicationsRes,
+        agentsRes,
+        attendancesRes,
+        trainerRes,
+      ] = await Promise.all([
+        apiGet("/programs"),
+        apiGet("/applications?per_page=100"),
+        apiGet("/agents"),
+        apiGet("/attendances"),
+        apiGet("/trainer-attendances"),
+      ]);
 
       const programs = extractCollection(programsRes);
       const applications = extractCollection(applicationsRes);
       const agents = extractCollection(agentsRes);
       const attendances = extractCollection(attendancesRes);
       const trainerAttendances = extractCollection(trainerRes);
+
       const trainerSummary = trainerRes?.summary || {
         total_records: trainerAttendances.length,
         present: trainerAttendances.filter(
@@ -161,10 +174,12 @@ export default function AdminDashboard() {
         (sum, item) => sum + toNumber(item?.shift_summary?.total_capacity),
         0
       );
+
       const totalFilled = programs.reduce(
         (sum, item) => sum + toNumber(item?.shift_summary?.total_filled),
         0
       );
+
       const fullShifts = programs.reduce(
         (sum, item) => sum + toNumber(item?.shift_summary?.full_shifts),
         0
@@ -173,20 +188,27 @@ export default function AdminDashboard() {
       const pendingApplications = applications.filter(
         (item) => normalizeStatus(item?.status) === "pending"
       ).length;
+
       const reviewedApplications = applications.filter(
         (item) => normalizeStatus(item?.status) === "reviewed"
       ).length;
+
       const acceptedApplications = applications.filter(
         (item) => normalizeStatus(item?.status) === "accepted"
       ).length;
+
       const rejectedApplications = applications.filter(
         (item) => normalizeStatus(item?.status) === "rejected"
       ).length;
+
       const waitlistedApplications = applications.filter(
         (item) => normalizeStatus(item?.status) === "waitlisted"
       ).length;
 
-      const activeAgents = agents.filter((item) => Boolean(item?.is_active)).length;
+      const activeAgents = agents.filter((item) => {
+        if (typeof item?.is_active === "boolean") return item.is_active;
+        return normalizeStatus(item?.status) === "active";
+      }).length;
 
       const agentTotals = agents.reduce(
         (acc, agent) => {
@@ -213,6 +235,7 @@ export default function AdminDashboard() {
 
       const totalAttendance =
         attendances.length + toNumber(trainerSummary?.total_records);
+
       const presentAttendance =
         studentPresentCount + toNumber(trainerSummary?.present);
 
@@ -257,10 +280,12 @@ export default function AdminDashboard() {
         value: Math.round((item.count / maxCategoryCount) * 100),
       }));
 
-      const sortedCategories = [...categoryCounts].sort((a, b) => b.count - a.count);
-      const bestCategory = sortedCategories[0]?.label || "N/A";
+      const bestCategory =
+        [...categoryCounts].sort((a, b) => b.count - a.count)[0]?.label || "N/A";
+
       const lowestCategory =
-        [...sortedCategories].sort((a, b) => a.count - b.count)[0]?.label || "N/A";
+        [...categoryCounts].sort((a, b) => a.count - b.count)[0]?.label ||
+        "N/A";
 
       const recentRows = buildRecentRows({
         programs,
@@ -309,9 +334,7 @@ export default function AdminDashboard() {
       });
     } catch (err) {
       console.error("Dashboard load failed:", err);
-      setError(
-        err?.message || "Failed to load dashboard data. Please check the API."
-      );
+      setError(err?.message || "Failed to load dashboard data.");
       setDashboard(EMPTY_DASHBOARD);
     } finally {
       setLoading(false);
@@ -497,14 +520,8 @@ export default function AdminDashboard() {
               ["Total Students", dashboard.agentBreakdown.totalStudents],
               ["Paid Students", dashboard.agentBreakdown.paidStudents],
               ["Not Paid Students", dashboard.agentBreakdown.notPaidStudents],
-              [
-                "Expected Commission",
-                formatMoney(dashboard.agentBreakdown.expectedCommission),
-              ],
-              [
-                "Paid Commission",
-                formatMoney(dashboard.agentBreakdown.totalCommission),
-              ],
+              ["Expected Commission", formatMoney(dashboard.agentBreakdown.expectedCommission)],
+              ["Paid Commission", formatMoney(dashboard.agentBreakdown.totalCommission)],
             ]}
           />
 
@@ -522,9 +539,7 @@ export default function AdminDashboard() {
 
         <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50">
           <div className="border-b border-slate-200 px-5 py-5 sm:px-6">
-            <h3 className="text-lg font-extrabold text-slate-900">
-              Recent Activity
-            </h3>
+            <h3 className="text-lg font-extrabold text-slate-900">Recent Activity</h3>
             <p className="mt-1 text-sm text-slate-500">
               Latest live records from programs, applications, agents, and attendance
             </p>
@@ -548,7 +563,6 @@ export default function AdminDashboard() {
                       <th className="px-6 py-4 font-bold">Source</th>
                     </tr>
                   </thead>
-
                   <tbody className="divide-y divide-slate-200">
                     {dashboard.recentRows.map((row) => (
                       <Row key={row.key} {...row} />
@@ -616,7 +630,7 @@ function ProgressItem({ label, value }) {
       <div className="mt-2 h-3 overflow-hidden rounded-full bg-slate-200">
         <div
           className="h-full rounded-full bg-gradient-to-r from-indigo-600 to-sky-500"
-          style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
+          style={{ width: `${clampPercent(value)}%` }}
         />
       </div>
     </div>
@@ -633,7 +647,7 @@ function Bar({ label, value }) {
       <div className="mt-2 h-3 overflow-hidden rounded-full bg-slate-200">
         <div
           className="h-full rounded-full bg-gradient-to-r from-indigo-600 to-sky-500"
-          style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
+          style={{ width: `${clampPercent(value)}%` }}
         />
       </div>
     </div>
@@ -644,7 +658,6 @@ function InfoPanel({ title, rows }) {
   return (
     <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
       <h3 className="text-base font-extrabold text-slate-900">{title}</h3>
-
       <div className="mt-4 space-y-3">
         {rows.map(([label, value]) => (
           <div
@@ -665,13 +678,9 @@ function Row({ date, code, title, owner, status, source }) {
     <tr>
       <td className="px-6 py-4 text-slate-600">{date}</td>
       <td className="px-6 py-4 font-bold text-slate-900">{code}</td>
-      <td className="px-6 py-4">
-        <div className="font-semibold text-slate-800">{title}</div>
-      </td>
+      <td className="px-6 py-4"><div className="font-semibold text-slate-800">{title}</div></td>
       <td className="px-6 py-4 text-slate-600">{owner}</td>
-      <td className="px-6 py-4">
-        <StatusBadge status={status} />
-      </td>
+      <td className="px-6 py-4"><StatusBadge status={status} /></td>
       <td className="px-6 py-4 text-sm font-semibold text-indigo-600">{source}</td>
     </tr>
   );
@@ -683,24 +692,18 @@ function MobileRow({ date, code, title, owner, status, source }) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-sm font-extrabold text-slate-900">{title}</div>
-          <div className="mt-1 text-xs text-slate-500">
-            {code} • {source}
-          </div>
+          <div className="mt-1 text-xs text-slate-500">{code} • {source}</div>
         </div>
         <StatusBadge status={status} />
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
         <div>
-          <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
-            Date
-          </div>
+          <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Date</div>
           <div className="mt-1 text-slate-700">{date}</div>
         </div>
         <div>
-          <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
-            Owner
-          </div>
+          <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Owner</div>
           <div className="mt-1 text-slate-700">{owner}</div>
         </div>
       </div>
@@ -710,18 +713,11 @@ function MobileRow({ date, code, title, owner, status, source }) {
 
 function StatusBadge({ status }) {
   const normalized = normalizeStatus(status);
-
   let styles = "border-slate-200 bg-slate-50 text-slate-700";
 
-  if (
-    ["active", "accepted", "paid", "present", "reviewed"].includes(normalized)
-  ) {
+  if (["active", "accepted", "paid", "present", "reviewed"].includes(normalized)) {
     styles = "border-emerald-200 bg-emerald-50 text-emerald-700";
-  } else if (
-    ["pending", "not_paid", "waitlisted", "late", "draft", "not marked"].includes(
-      normalized
-    )
-  ) {
+  } else if (["pending", "not_paid", "waitlisted", "late", "draft", "not marked"].includes(normalized)) {
     styles = "border-amber-200 bg-amber-50 text-amber-700";
   } else if (["rejected", "quit", "absent", "archived", "inactive"].includes(normalized)) {
     styles = "border-rose-200 bg-rose-50 text-rose-700";
@@ -730,21 +726,13 @@ function StatusBadge({ status }) {
   }
 
   return (
-    <span
-      className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${styles}`}
-    >
+    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${styles}`}>
       {toStatusLabel(status)}
     </span>
   );
 }
 
-function buildRecentRows({
-  programs,
-  applications,
-  agents,
-  attendances,
-  trainerAttendances,
-}) {
+function buildRecentRows({ programs, applications, agents, attendances, trainerAttendances }) {
   const rows = [];
 
   programs.forEach((item) => {
@@ -754,30 +742,24 @@ function buildRecentRows({
       sortDate: item.created_at || item.updated_at || item.start_date,
       code: item.code || `PRG-${padCode(item.id)}`,
       title: item.name || "Untitled Program",
-      owner:
-        item.instructor ||
-        (item.users_count ? `${item.users_count} linked users` : "Programs"),
+      owner: item.instructor || (item.users_count ? `${item.users_count} linked users` : "Programs"),
       status: item.status || "Draft",
       source: "Program",
     });
   });
 
   applications.forEach((item) => {
-    const fullName = [
-      item?.applicant?.first_name,
-      item?.applicant?.last_name,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .trim();
+    const firstName = item?.applicant?.first_name || item?.first_name || item?.user?.first_name || "";
+    const lastName = item?.applicant?.last_name || item?.last_name || item?.user?.last_name || "";
+    const fullName = `${firstName} ${lastName}`.trim();
 
     rows.push({
       key: `application-${item.id}`,
       date: formatDate(item.submitted_at || item.created_at),
       sortDate: item.submitted_at || item.created_at,
-      code: `APP-${padCode(item.id)}`,
-      title: fullName || item?.program?.title || "Application",
-      owner: item?.program?.title || item?.applicant?.email || "Application",
+      code: item.code || `APP-${padCode(item.id)}`,
+      title: fullName || item?.program?.title || item?.program_title || "Application",
+      owner: item?.program?.title || item?.program?.name || item?.program_title || item?.email || item?.applicant?.email || "Application",
       status: item.status || "Pending",
       source: "Application",
     });
@@ -788,7 +770,7 @@ function buildRecentRows({
       key: `agent-${item.id}`,
       date: formatDate(item.created_at || item.updated_at),
       sortDate: item.created_at || item.updated_at,
-      code: `AGT-${padCode(item.id)}`,
+      code: item.code || `AGT-${padCode(item.id)}`,
       title: item.name || "Agent",
       owner: `${formatNumber(item?.stats?.total_students || 0)} students`,
       status: item.is_active ? "Active" : item.status || "Inactive",
@@ -800,8 +782,11 @@ function buildRecentRows({
     const applicationName = [
       item?.application?.first_name,
       item?.application?.last_name,
+      item?.first_name,
+      item?.last_name,
     ]
       .filter(Boolean)
+      .slice(0, 2)
       .join(" ")
       .trim();
 
@@ -809,9 +794,9 @@ function buildRecentRows({
       key: `attendance-${item.id}`,
       date: formatDate(item.attendance_date || item.created_at),
       sortDate: item.attendance_date || item.created_at,
-      code: `ATT-${padCode(item.id)}`,
-      title: applicationName || item?.program?.name || "Attendance Record",
-      owner: item?.marked_by_user?.name || item?.markedByUser?.name || "Attendance",
+      code: item.code || `ATT-${padCode(item.id)}`,
+      title: applicationName || item?.program?.name || item?.program_title || "Attendance Record",
+      owner: item?.markedByUser?.name || item?.marked_by_user?.name || "Attendance",
       status: item.status || "Not Marked",
       source: "Student Attendance",
     });
@@ -822,7 +807,7 @@ function buildRecentRows({
       key: `trainer-attendance-${item.id}`,
       date: formatDate(item.attendance_date || item.created_at),
       sortDate: item.attendance_date || item.created_at,
-      code: `TRN-${padCode(item.id)}`,
+      code: item.code || `TRN-${padCode(item.id)}`,
       title: item?.trainer?.name || "Trainer",
       owner: item?.trainer?.email || "Trainer Attendance",
       status: item?.is_paid ? "Paid" : item?.status || "Not Marked",
@@ -833,16 +818,16 @@ function buildRecentRows({
   return rows
     .sort((a, b) => getTimeValue(b.sortDate) - getTimeValue(a.sortDate))
     .slice(0, 8)
-    .map((row) => ({
-      ...row,
-      date: row.date || "—",
-    }));
+    .map((row) => ({ ...row, date: row.date || "—" }));
 }
 
 async function apiGet(path) {
-  const token = getAuthToken();
+  const { token } =
+    typeof window !== "undefined"
+      ? getAuthState()
+      : { token: "" };
 
-  const response = await fetch(makeUrl(path), {
+  const response = await fetch(`${API_BASE}${path}`, {
     method: "GET",
     headers: {
       Accept: "application/json",
@@ -851,13 +836,27 @@ async function apiGet(path) {
     },
   });
 
-  const data = await response.json().catch(() => ({}));
+  const text = await response.text();
+  let result = {};
 
-  if (!response.ok) {
-    throw new Error(data?.message || `Request failed for ${path}`);
+  try {
+    result = text ? JSON.parse(text) : {};
+  } catch {
+    result = { message: text || "Unable to parse server response." };
   }
 
-  return data;
+  if (response.status === 401) {
+    if (typeof window !== "undefined") {
+      clearStoredAuth();
+    }
+    throw new Error(result?.message || "Unauthenticated.");
+  }
+
+  if (!response.ok) {
+    throw new Error(result?.message || "Request failed.");
+  }
+
+  return result;
 }
 
 function extractCollection(payload) {
@@ -867,33 +866,13 @@ function extractCollection(payload) {
   return [];
 }
 
-function getAuthToken() {
-  if (typeof window === "undefined") return "";
-
-  return (
-    localStorage.getItem("token") ||
-    localStorage.getItem("auth_token") ||
-    localStorage.getItem("access_token") ||
-    ""
-  );
-}
-
-function makeUrl(path) {
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${API_BASE}${normalizedPath}`;
-}
-
 function normalizeStatus(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, " ");
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 function toStatusLabel(value) {
   const raw = String(value || "").trim();
   if (!raw) return "Unknown";
-
   if (raw === "not_paid") return "Not Paid";
   return raw;
 }
@@ -912,6 +891,10 @@ function averageOf(values) {
 function toNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
+}
+
+function clampPercent(value) {
+  return Math.max(0, Math.min(100, toNumber(value)));
 }
 
 function formatNumber(value) {
@@ -946,10 +929,7 @@ function padCode(value) {
 function IconProgram() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M12 3 2 8l10 5 8-4v6h2V8L12 3Zm-6 8.5V16l6 3 6-3v-4.5l-6 3-6-3Z"
-        fill="currentColor"
-      />
+      <path d="M12 3 2 8l10 5 8-4v6h2V8L12 3Zm-6 8.5V16l6 3 6-3v-4.5l-6 3-6-3Z" fill="currentColor" />
     </svg>
   );
 }
@@ -957,19 +937,8 @@ function IconProgram() {
 function IconApplication() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M7 3h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm7 1.5V9h4.5"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M9 13h6M9 17h6"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
+      <path d="M7 3h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm7 1.5V9h4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M9 13h6M9 17h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
@@ -977,10 +946,7 @@ function IconApplication() {
 function IconUsers() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M16 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4ZM8 13a3 3 0 1 0-3-3 3 3 0 0 0 3 3Zm8 2c-3.314 0-6 1.79-6 4v1h12v-1c0-2.21-2.686-4-6-4ZM8 15c-2.67 0-5 1.34-5 3v2h5.5"
-        fill="currentColor"
-      />
+      <path d="M16 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4ZM8 13a3 3 0 1 0-3-3 3 3 0 0 0 3 3Zm8 2c-3.314 0-6 1.79-6 4v1h12v-1c0-2.21-2.686-4-6-4ZM8 15c-2.67 0-5 1.34-5 3v2h5.5" fill="currentColor" />
     </svg>
   );
 }
@@ -988,13 +954,7 @@ function IconUsers() {
 function IconAttendance() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M7 2v3M17 2v3M4 7h16M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Zm2.5 8 2 2 5-5"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <path d="M7 2v3M17 2v3M4 7h16M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Zm2.5 8 2 2 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -1002,12 +962,7 @@ function IconAttendance() {
 function IconChart() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M5 19V10M12 19V5M19 19v-7"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
+      <path d="M5 19V10M12 19V5M19 19v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }
@@ -1015,10 +970,7 @@ function IconChart() {
 function IconSpark() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path
-        d="m12 3 1.8 4.7L18.5 9l-4.7 1.3L12 15l-1.8-4.7L5.5 9l4.7-1.3L12 3Zm6.5 12 1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1 1-2.5ZM5 14l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2Z"
-        fill="currentColor"
-      />
+      <path d="m12 3 1.8 4.7L18.5 9l-4.7 1.3L12 15l-1.8-4.7L5.5 9l4.7-1.3L12 3Zm6.5 12 1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1 1-2.5ZM5 14l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2Z" fill="currentColor" />
     </svg>
   );
 }

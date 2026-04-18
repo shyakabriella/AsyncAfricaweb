@@ -160,19 +160,36 @@ function getStorageState(storage) {
 }
 
 export function getActiveStorage() {
-  const sessionState = getStorageState(sessionStorage);
-  const localState = getStorageState(localStorage);
+  const sessionState =
+    typeof window !== "undefined"
+      ? getStorageState(sessionStorage)
+      : null;
 
-  if (sessionState.authenticated) return sessionStorage;
-  if (localState.authenticated) return localStorage;
+  const localState =
+    typeof window !== "undefined"
+      ? getStorageState(localStorage)
+      : null;
 
-  if (sessionState.token) return sessionStorage;
-  if (localState.token) return localStorage;
+  if (sessionState?.authenticated) return sessionStorage;
+  if (localState?.authenticated) return localStorage;
+
+  if (sessionState?.token) return sessionStorage;
+  if (localState?.token) return localStorage;
 
   return null;
 }
 
 export function getAuthState() {
+  if (typeof window === "undefined") {
+    return {
+      storage: null,
+      token: "",
+      user: null,
+      role: "",
+      authenticated: false,
+    };
+  }
+
   const sessionState = getStorageState(sessionStorage);
   const localState = getStorageState(localStorage);
 
@@ -224,6 +241,8 @@ export function getAuthState() {
 }
 
 export function clearStoredAuth() {
+  if (typeof window === "undefined") return;
+
   [localStorage, sessionStorage].forEach((storage) => {
     storage.removeItem("token");
     storage.removeItem("auth_token");
