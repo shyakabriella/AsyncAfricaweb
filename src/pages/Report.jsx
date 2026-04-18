@@ -26,6 +26,7 @@ export default function Report() {
   const [error, setError] = useState("");
   const [activeSection, setActiveSection] = useState("programs");
   const [selectedItem, setSelectedItem] = useState(null);
+  const [applicationStatusFilter, setApplicationStatusFilter] = useState("all");
   const [filters, setFilters] = useState({
     search: "",
     dateFrom: "",
@@ -57,6 +58,7 @@ export default function Report() {
 
   useEffect(() => {
     setSelectedItem(null);
+    setApplicationStatusFilter("all");
   }, [activeSection]);
 
   async function loadReport() {
@@ -181,6 +183,11 @@ export default function Report() {
     [data.trainerAttendances, filters]
   );
 
+  const applicationProgramGroups = useMemo(
+    () => groupApplicationsByProgram(filteredApplications),
+    [filteredApplications]
+  );
+
   const reportSections = useMemo(() => {
     const activePrograms = filteredPrograms.filter(
       (item) => normalizeStatus(item?.status) === "active"
@@ -199,8 +206,8 @@ export default function Report() {
       (item) => normalizeStatus(item?.status) === "present"
     ).length;
 
-    const trainerPaid = filteredTrainerAttendances.filter(
-      (item) => Boolean(item?.is_paid)
+    const trainerPaid = filteredTrainerAttendances.filter((item) =>
+      Boolean(item?.is_paid)
     ).length;
 
     return [
@@ -218,7 +225,7 @@ export default function Report() {
         subtitle: `${pendingApplications} pending applications`,
         count: filteredApplications.length,
         icon: <ClipboardList className="h-5 w-5" />,
-        items: filteredApplications,
+        items: applicationProgramGroups,
       },
       {
         key: "agents",
@@ -251,11 +258,41 @@ export default function Report() {
     filteredAgents,
     filteredAttendances,
     filteredTrainerAttendances,
+    applicationProgramGroups,
   ]);
 
   const currentSection = reportSections.find(
     (section) => section.key === activeSection
   );
+
+  const applicationStatuses = useMemo(() => {
+    if (activeSection !== "applications" || !selectedItem?.applications) {
+      return ["all"];
+    }
+
+    const found = [
+      "all",
+      ...new Set(
+        selectedItem.applications
+          .map((item) => normalizeStatus(item?.status))
+          .filter(Boolean)
+      ),
+    ];
+
+    return found;
+  }, [activeSection, selectedItem]);
+
+  const filteredProgramApplications = useMemo(() => {
+    if (activeSection !== "applications" || !selectedItem?.applications) return [];
+
+    if (applicationStatusFilter === "all") {
+      return selectedItem.applications;
+    }
+
+    return selectedItem.applications.filter(
+      (item) => normalizeStatus(item?.status) === applicationStatusFilter
+    );
+  }, [activeSection, selectedItem, applicationStatusFilter]);
 
   const exportPdf = () => {
     window.print();
@@ -264,185 +301,241 @@ export default function Report() {
   return (
     <>
       <style>{`
+        @page {
+          size: A4 portrait;
+          margin: 10mm;
+        }
+
+        .print-only-a4 {
+          display: none;
+        }
+
         @media print {
           body {
-            background: white !important;
+            background: #ffffff !important;
           }
 
-          .print-hide {
+          .screen-content {
             display: none !important;
           }
 
-          .print-root {
-            padding: 0 !important;
-            margin: 0 !important;
+          .print-only-a4 {
+            display: block !important;
           }
 
-          .print-card {
-            box-shadow: none !important;
-            border: 1px solid #e2e8f0 !important;
-            break-inside: avoid;
+          .print-sheet {
+            width: 190mm;
+            min-height: 277mm;
+            margin: 0 auto;
+            background: #ffffff;
+            color: #111827;
+          }
+
+          .print-table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+
+          .print-table th,
+          .print-table td {
+            border: 1px solid #d1d5db;
+            padding: 8px;
+            font-size: 11px;
+            text-align: left;
+            vertical-align: top;
+          }
+
+          .print-table th {
+            background: #f8fafc;
+            font-weight: 700;
           }
         }
       `}</style>
 
-      <div className="print-root space-y-6">
-        <div className="print-card rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-indigo-600">
-                AsyncAfrica Report Center
-              </p>
-              <h1 className="mt-2 text-2xl font-extrabold text-slate-900 sm:text-3xl">
-                Reports & Analytics
-              </h1>
-              <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-500">
-                Open each report as a card, then click again to view detailed
-                information.
-              </p>
-            </div>
-
-            <div className="print-hide flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={loadReport}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
-              >
-                <RefreshCw className="h-4 w-4" />
-                Refresh
-              </button>
-
-              <button
-                type="button"
-                onClick={exportPdf}
-                className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-indigo-700"
-              >
-                <Download className="h-4 w-4" />
-                Export PDF
-              </button>
-            </div>
-          </div>
-
-          {error ? (
-            <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              {error}
-            </div>
-          ) : null}
-        </div>
-
-        <div className="print-hide print-card rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search report..."
-                value={filters.search}
-                onChange={(e) =>
-                  setFilters((prev) => ({ ...prev, search: e.target.value }))
-                }
-                className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 text-sm outline-none focus:border-indigo-500"
-              />
-            </div>
-
-            <input
-              type="date"
-              value={filters.dateFrom}
-              onChange={(e) =>
-                setFilters((prev) => ({ ...prev, dateFrom: e.target.value }))
-              }
-              className="rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-            />
-
-            <input
-              type="date"
-              value={filters.dateTo}
-              onChange={(e) =>
-                setFilters((prev) => ({ ...prev, dateTo: e.target.value }))
-              }
-              className="rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          {reportSections.map((section) => (
-            <button
-              key={section.key}
-              type="button"
-              onClick={() => setActiveSection(section.key)}
-              className={`print-card rounded-3xl border p-5 text-left shadow-sm transition ${
-                activeSection === section.key
-                  ? "border-indigo-500 bg-indigo-50"
-                  : "border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50"
-              }`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white text-indigo-600 shadow-sm">
-                  {section.icon}
-                </div>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
-                  {formatNumber(section.count)}
-                </span>
-              </div>
-
-              <div className="mt-4">
-                <h3 className="text-base font-extrabold text-slate-900">
-                  {section.title}
-                </h3>
-                <p className="mt-1 text-sm text-slate-500">{section.subtitle}</p>
-              </div>
-            </button>
-          ))}
-        </div>
-
-        <div className="print-card rounded-3xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 px-5 py-5 sm:px-6">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="space-y-6">
+        <div className="screen-content space-y-6">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <h2 className="text-lg font-extrabold text-slate-900">
-                  {currentSection?.title || "Report Details"}
-                </h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  {!selectedItem
-                    ? "Click one card below to open full details."
-                    : "Detailed opened report information."}
+                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-indigo-600">
+                  AsyncAfrica Report Center
+                </p>
+                <h1 className="mt-2 text-2xl font-extrabold text-slate-900 sm:text-3xl">
+                  Reports & Analytics
+                </h1>
+                <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-500">
+                  Open each report as a card, then open deeper details.
                 </p>
               </div>
 
-              {selectedItem ? (
+              <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
-                  onClick={() => setSelectedItem(null)}
-                  className="print-hide inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                  onClick={loadReport}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
                 >
-                  <ArrowLeft className="h-4 w-4" />
-                  Back
+                  <RefreshCw className="h-4 w-4" />
+                  Refresh
                 </button>
-              ) : null}
+
+                {activeSection === "applications" && selectedItem ? (
+                  <button
+                    type="button"
+                    onClick={exportPdf}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-indigo-700"
+                  >
+                    <Download className="h-4 w-4" />
+                    Export PDF (A4)
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            {error ? (
+              <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                {error}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search report..."
+                  value={filters.search}
+                  onChange={(e) =>
+                    setFilters((prev) => ({ ...prev, search: e.target.value }))
+                  }
+                  className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 text-sm outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <input
+                type="date"
+                value={filters.dateFrom}
+                onChange={(e) =>
+                  setFilters((prev) => ({ ...prev, dateFrom: e.target.value }))
+                }
+                className="rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+              />
+
+              <input
+                type="date"
+                value={filters.dateTo}
+                onChange={(e) =>
+                  setFilters((prev) => ({ ...prev, dateTo: e.target.value }))
+                }
+                className="rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+              />
             </div>
           </div>
 
-          <div className="p-5 sm:p-6">
-            {loading ? (
-              <div className="py-16 text-center text-sm text-slate-500">
-                Loading report...
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+            {reportSections.map((section) => (
+              <button
+                key={section.key}
+                type="button"
+                onClick={() => setActiveSection(section.key)}
+                className={`rounded-3xl border p-5 text-left shadow-sm transition ${
+                  activeSection === section.key
+                    ? "border-indigo-500 bg-indigo-50"
+                    : "border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white text-indigo-600 shadow-sm">
+                    {section.icon}
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                    {formatNumber(section.count)}
+                  </span>
+                </div>
+
+                <div className="mt-4">
+                  <h3 className="text-base font-extrabold text-slate-900">
+                    {section.title}
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">{section.subtitle}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-200 px-5 py-5 sm:px-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-extrabold text-slate-900">
+                    {currentSection?.title || "Report Details"}
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {activeSection === "applications" && !selectedItem
+                      ? "Click one program card to open the application table."
+                      : !selectedItem
+                      ? "Click one card below to open full details."
+                      : "Detailed opened report information."}
+                  </p>
+                </div>
+
+                {selectedItem ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedItem(null);
+                      setApplicationStatusFilter("all");
+                    }}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back
+                  </button>
+                ) : null}
               </div>
-            ) : !currentSection ? (
-              <div className="py-16 text-center text-sm text-slate-500">
-                No report section selected.
-              </div>
-            ) : !selectedItem ? (
-              <SectionGrid
-                sectionKey={currentSection.key}
-                items={currentSection.items}
-                onSelect={setSelectedItem}
-              />
-            ) : (
-              <OpenedReport sectionKey={activeSection} item={selectedItem} />
-            )}
+            </div>
+
+            <div className="p-5 sm:p-6">
+              {loading ? (
+                <div className="py-16 text-center text-sm text-slate-500">
+                  Loading report...
+                </div>
+              ) : !currentSection ? (
+                <div className="py-16 text-center text-sm text-slate-500">
+                  No report section selected.
+                </div>
+              ) : !selectedItem ? (
+                <SectionGrid
+                  sectionKey={currentSection.key}
+                  items={currentSection.items}
+                  onSelect={setSelectedItem}
+                />
+              ) : activeSection === "applications" ? (
+                <ApplicationProgramDetail
+                  group={selectedItem}
+                  statusFilter={applicationStatusFilter}
+                  setStatusFilter={setApplicationStatusFilter}
+                  statuses={applicationStatuses}
+                  rows={filteredProgramApplications}
+                  onExport={exportPdf}
+                />
+              ) : (
+                <OpenedReport sectionKey={activeSection} item={selectedItem} />
+              )}
+            </div>
           </div>
         </div>
+
+        {activeSection === "applications" && selectedItem ? (
+          <div className="print-only-a4">
+            <ApplicationA4Print
+              group={selectedItem}
+              statusFilter={applicationStatusFilter}
+              rows={filteredProgramApplications}
+            />
+          </div>
+        ) : null}
       </div>
     </>
   );
@@ -459,15 +552,17 @@ function SectionGrid({ sectionKey, items, onSelect }) {
 
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {items.map((item) => (
+      {items.map((item, index) => (
         <button
-          key={`${sectionKey}-${item?.id || Math.random()}`}
+          key={`${sectionKey}-${item?.id || item?.key || index}`}
           type="button"
           onClick={() => onSelect(item)}
           className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:border-indigo-300 hover:bg-indigo-50"
         >
           {sectionKey === "programs" && <ProgramCard item={item} />}
-          {sectionKey === "applications" && <ApplicationCard item={item} />}
+          {sectionKey === "applications" && (
+            <ApplicationProgramCard item={item} />
+          )}
           {sectionKey === "agents" && <AgentCard item={item} />}
           {sectionKey === "attendance" && <AttendanceCard item={item} />}
           {sectionKey === "trainerAttendance" && (
@@ -475,6 +570,257 @@ function SectionGrid({ sectionKey, items, onSelect }) {
           )}
         </button>
       ))}
+    </div>
+  );
+}
+
+function ApplicationProgramCard({ item }) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-extrabold text-slate-900">
+            {item?.title || "Unknown Program"}
+          </h3>
+          <p className="mt-1 text-sm text-slate-500">
+            {formatNumber(item?.count || 0)} applications
+          </p>
+        </div>
+        <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-700">
+          Program
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <MiniMetric label="Pending" value={item?.statusCounts?.pending || 0} />
+        <MiniMetric label="Accepted" value={item?.statusCounts?.accepted || 0} />
+        <MiniMetric label="Rejected" value={item?.statusCounts?.rejected || 0} />
+        <MiniMetric label="Reviewed" value={item?.statusCounts?.reviewed || 0} />
+      </div>
+
+      <p className="text-xs font-medium text-indigo-600">
+        Click to open application table
+      </p>
+    </div>
+  );
+}
+
+function ApplicationProgramDetail({
+  group,
+  statusFilter,
+  setStatusFilter,
+  statuses,
+  rows,
+  onExport,
+}) {
+  return (
+    <div className="space-y-6">
+      <div className="rounded-3xl border border-indigo-100 bg-indigo-50 p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h3 className="text-lg font-extrabold text-slate-900">
+              {group?.title || "Program Applications"}
+            </h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Applications table for this program
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onExport}
+            className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-indigo-700"
+          >
+            <Download className="h-4 w-4" />
+            Export PDF (A4)
+          </button>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
+          <DetailMetric label="All" value={group?.count || 0} />
+          <DetailMetric label="Pending" value={group?.statusCounts?.pending || 0} />
+          <DetailMetric label="Accepted" value={group?.statusCounts?.accepted || 0} />
+          <DetailMetric label="Rejected" value={group?.statusCounts?.rejected || 0} />
+          <DetailMetric label="Reviewed" value={group?.statusCounts?.reviewed || 0} />
+          <DetailMetric label="Waitlisted" value={group?.statusCounts?.waitlisted || 0} />
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {statuses.map((status) => (
+          <button
+            key={status}
+            type="button"
+            onClick={() => setStatusFilter(status)}
+            className={`rounded-full px-4 py-2 text-sm font-bold transition ${
+              statusFilter === status
+                ? "bg-indigo-600 text-white"
+                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+            }`}
+          >
+            {status === "all" ? "All" : formatStatusLabel(status)}
+          </button>
+        ))}
+      </div>
+
+      <div className="overflow-x-auto rounded-3xl border border-slate-200">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 text-slate-600">
+            <tr className="text-left">
+              <th className="px-5 py-4 font-bold">#</th>
+              <th className="px-5 py-4 font-bold">Applicant</th>
+              <th className="px-5 py-4 font-bold">Email</th>
+              <th className="px-5 py-4 font-bold">Phone</th>
+              <th className="px-5 py-4 font-bold">Country</th>
+              <th className="px-5 py-4 font-bold">City</th>
+              <th className="px-5 py-4 font-bold">Status</th>
+              <th className="px-5 py-4 font-bold">Submitted</th>
+            </tr>
+          </thead>
+
+          <tbody className="divide-y divide-slate-200 bg-white">
+            {rows.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={8}
+                  className="px-5 py-10 text-center text-sm text-slate-500"
+                >
+                  No applications found for this status.
+                </td>
+              </tr>
+            ) : (
+              rows.map((item, index) => {
+                const firstName =
+                  item?.first_name || item?.applicant?.first_name || "";
+                const lastName =
+                  item?.last_name || item?.applicant?.last_name || "";
+                const fullName = `${firstName} ${lastName}`.trim();
+
+                return (
+                  <tr key={item?.id || index}>
+                    <td className="px-5 py-4 text-slate-600">{index + 1}</td>
+                    <td className="px-5 py-4 font-semibold text-slate-900">
+                      {fullName || "-"}
+                    </td>
+                    <td className="px-5 py-4 text-slate-700">
+                      {item?.email || item?.applicant?.email || "-"}
+                    </td>
+                    <td className="px-5 py-4 text-slate-700">
+                      {item?.phone || item?.applicant?.phone || "-"}
+                    </td>
+                    <td className="px-5 py-4 text-slate-700">
+                      {item?.country || item?.applicant?.country || "-"}
+                    </td>
+                    <td className="px-5 py-4 text-slate-700">
+                      {item?.city || item?.applicant?.city || "-"}
+                    </td>
+                    <td className="px-5 py-4">
+                      <StatusPill label={item?.status || "Unknown"} />
+                    </td>
+                    <td className="px-5 py-4 text-slate-700">
+                      {formatDate(item?.submitted_at || item?.created_at)}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ApplicationA4Print({ group, statusFilter, rows }) {
+  return (
+    <div className="print-sheet">
+      <div style={{ marginBottom: "16px" }}>
+        <div
+          style={{
+            fontSize: "12px",
+            fontWeight: 700,
+            letterSpacing: "0.18em",
+            textTransform: "uppercase",
+            color: "#4f46e5",
+          }}
+        >
+          AsyncAfrica Applications Report
+        </div>
+        <h1
+          style={{
+            marginTop: "8px",
+            fontSize: "22px",
+            fontWeight: 800,
+            color: "#111827",
+          }}
+        >
+          {group?.title || "Program Applications"}
+        </h1>
+        <div
+          style={{
+            marginTop: "6px",
+            fontSize: "12px",
+            color: "#475569",
+          }}
+        >
+          Status Filter:{" "}
+          <strong>
+            {statusFilter === "all" ? "All" : formatStatusLabel(statusFilter)}
+          </strong>
+        </div>
+        <div
+          style={{
+            marginTop: "4px",
+            fontSize: "12px",
+            color: "#475569",
+          }}
+        >
+          Total Rows: <strong>{formatNumber(rows.length)}</strong>
+        </div>
+      </div>
+
+      <table className="print-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Applicant</th>
+            <th>Email</th>
+            <th>Phone</th>
+            <th>Country</th>
+            <th>City</th>
+            <th>Status</th>
+            <th>Submitted</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={8}>No applications found for this status.</td>
+            </tr>
+          ) : (
+            rows.map((item, index) => {
+              const firstName =
+                item?.first_name || item?.applicant?.first_name || "";
+              const lastName =
+                item?.last_name || item?.applicant?.last_name || "";
+              const fullName = `${firstName} ${lastName}`.trim();
+
+              return (
+                <tr key={item?.id || index}>
+                  <td>{index + 1}</td>
+                  <td>{fullName || "-"}</td>
+                  <td>{item?.email || item?.applicant?.email || "-"}</td>
+                  <td>{item?.phone || item?.applicant?.phone || "-"}</td>
+                  <td>{item?.country || item?.applicant?.country || "-"}</td>
+                  <td>{item?.city || item?.applicant?.city || "-"}</td>
+                  <td>{item?.status || "-"}</td>
+                  <td>{formatDate(item?.submitted_at || item?.created_at)}</td>
+                </tr>
+              );
+            })
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -507,37 +853,6 @@ function ProgramCard({ item }) {
 
       <p className="text-xs font-medium text-indigo-600">
         Click to open program report
-      </p>
-    </div>
-  );
-}
-
-function ApplicationCard({ item }) {
-  const fullName = `${item?.first_name || item?.applicant?.first_name || ""} ${
-    item?.last_name || item?.applicant?.last_name || ""
-  }`.trim();
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-base font-extrabold text-slate-900">
-            {fullName || "Applicant"}
-          </h3>
-          <p className="mt-1 text-sm text-slate-500">
-            {item?.program_title || item?.program?.title || item?.program?.name || "-"}
-          </p>
-        </div>
-        <StatusPill label={item?.status || "Unknown"} />
-      </div>
-
-      <div className="grid grid-cols-1 gap-2 text-sm text-slate-600">
-        <div>{item?.email || item?.applicant?.email || "-"}</div>
-        <div>{formatDate(item?.submitted_at || item?.created_at)}</div>
-      </div>
-
-      <p className="text-xs font-medium text-indigo-600">
-        Click to open application report
       </p>
     </div>
   );
@@ -646,36 +961,6 @@ function OpenedReport({ sectionKey, item }) {
           <DetailMetric label="Full Shifts" value={formatNumber(fullShifts)} />
           <DetailMetric label="Price" value={item?.price ? `${formatNumber(item.price)} RWF` : "-"} />
         </div>
-
-        <div className="mt-6 rounded-3xl border border-slate-200 bg-slate-50 p-5">
-          <h3 className="text-base font-extrabold text-slate-900">
-            Program Overview
-          </h3>
-          <p className="mt-3 text-sm leading-7 text-slate-600">
-            {item?.overview || item?.intro || item?.description || "No description available."}
-          </p>
-        </div>
-      </DetailedWrap>
-    );
-  }
-
-  if (sectionKey === "applications") {
-    const fullName = `${item?.first_name || item?.applicant?.first_name || ""} ${
-      item?.last_name || item?.applicant?.last_name || ""
-    }`.trim();
-
-    return (
-      <DetailedWrap title={fullName || "Application Report"}>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <DetailMetric label="Program" value={item?.program_title || item?.program?.title || item?.program?.name || "-"} />
-          <DetailMetric label="Status" value={item?.status || "-"} />
-          <DetailMetric label="Email" value={item?.email || item?.applicant?.email || "-"} />
-          <DetailMetric label="Phone" value={item?.phone || item?.applicant?.phone || "-"} />
-          <DetailMetric label="Country" value={item?.country || item?.applicant?.country || "-"} />
-          <DetailMetric label="City" value={item?.city || item?.applicant?.city || "-"} />
-          <DetailMetric label="Experience" value={item?.experience_level || "-"} />
-          <DetailMetric label="Submitted" value={formatDate(item?.submitted_at || item?.created_at)} />
-        </div>
       </DetailedWrap>
     );
   }
@@ -713,13 +998,6 @@ function OpenedReport({ sectionKey, item }) {
           <DetailMetric label="Shift Ref" value={item?.shift_ref || "-"} />
           <DetailMetric label="Program" value={item?.program?.name || "-"} />
           <DetailMetric label="Marked By" value={item?.markedByUser?.name || item?.marked_by_user?.name || "-"} />
-        </div>
-
-        <div className="mt-6 rounded-3xl border border-slate-200 bg-slate-50 p-5">
-          <h3 className="text-base font-extrabold text-slate-900">Note</h3>
-          <p className="mt-3 text-sm leading-7 text-slate-600">
-            {item?.note || "No note added."}
-          </p>
         </div>
       </DetailedWrap>
     );
@@ -874,8 +1152,61 @@ function filterRows(rows, filters, getFields, getDate) {
   });
 }
 
+function groupApplicationsByProgram(applications) {
+  const map = new Map();
+
+  applications.forEach((item) => {
+    const rawId =
+      item?.program_id ||
+      item?.program?.id ||
+      item?.program_slug ||
+      item?.program?.slug ||
+      item?.program_title ||
+      item?.program?.title ||
+      item?.program?.name ||
+      "unknown-program";
+
+    const title =
+      item?.program_title ||
+      item?.program?.title ||
+      item?.program?.name ||
+      "Unknown Program";
+
+    const key = String(rawId);
+
+    if (!map.has(key)) {
+      map.set(key, {
+        id: key,
+        key,
+        title,
+        count: 0,
+        applications: [],
+        statusCounts: {},
+      });
+    }
+
+    const group = map.get(key);
+    const status = normalizeStatus(item?.status || "unknown");
+
+    group.count += 1;
+    group.applications.push(item);
+    group.statusCounts[status] = (group.statusCounts[status] || 0) + 1;
+  });
+
+  return Array.from(map.values()).sort((a, b) =>
+    a.title.localeCompare(b.title)
+  );
+}
+
 function normalizeStatus(value) {
   return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function formatStatusLabel(status) {
+  if (!status) return "-";
+  return String(status)
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
 function toNumber(value) {
