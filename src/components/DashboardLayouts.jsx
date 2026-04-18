@@ -95,6 +95,13 @@ function getTitle(path, role) {
     return "System Settings";
   }
 
+  if (
+    path.includes("/dashboard/report") ||
+    path.includes("/dashboard/reports")
+  ) {
+    return "Reports";
+  }
+
   if (path.includes("/dashboard/agent")) {
     return "Agent Dashboard";
   }
@@ -115,7 +122,9 @@ function isAdminAllowedPath(path) {
     path.startsWith("/dashboard/internship") ||
     path.startsWith("/dashboard/users") ||
     path.startsWith("/dashboard/service-directory") ||
-    path.startsWith("/dashboard/settings")
+    path.startsWith("/dashboard/settings") ||
+    path.startsWith("/dashboard/report") ||
+    path.startsWith("/dashboard/reports")
   );
 }
 
@@ -137,7 +146,9 @@ function isCeoAllowedPath(path) {
     path === "/dashboard/ceo" ||
     path === "/dashboard/phone" ||
     path === "/dashboard/call" ||
-    path.startsWith("/dashboard/agents")
+    path.startsWith("/dashboard/agents") ||
+    path.startsWith("/dashboard/report") ||
+    path.startsWith("/dashboard/reports")
   );
 }
 

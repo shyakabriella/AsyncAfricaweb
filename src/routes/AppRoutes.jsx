@@ -20,6 +20,7 @@ import ApplicationDetails from "../pages/Training/ApplicationDetails";
 import Wallet from "../pages/Training/Wallet";
 import Projects from "../pages/Projects";
 import Contact from "../pages/Contact";
+import Report from "../pages/Report";
 
 import Program from "../dashboard/Program";
 import ProgramDetails from "../dashboard/ProgramDetails";
@@ -117,7 +118,6 @@ export default function AppRoutes() {
           <Route path="contact" element={<Contact />} />
         </Route>
 
-        {/* Public customer support phone page - no login required */}
         <Route path="/support/phone" element={<WebPhonePage />} />
         <Route path="/support/call" element={<Navigate to="/support/phone" replace />} />
 
@@ -316,7 +316,20 @@ export default function AppRoutes() {
             }
           />
 
-          {/* Internal/staff phone route - still protected */}
+          <Route
+            path="report"
+            element={
+              <RequireRole allowedRoles={["admin", "ceo"]}>
+                <Report />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="reports"
+            element={<Navigate to="/dashboard/report" replace />}
+          />
+
           <Route
             path="phone"
             element={
