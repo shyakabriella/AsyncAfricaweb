@@ -332,27 +332,31 @@ export default function DashboardLayouts() {
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
-      <Sidebar
-        open={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        role={currentRole}
-      />
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Header
-          onToggleSidebar={handleToggleSidebar}
-          title={pageTitle}
+    <div className="flex min-h-screen bg-slate-50 print:block print:bg-white">
+      <div className="print:hidden">
+        <Sidebar
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
           role={currentRole}
         />
+      </div>
 
-        <main className="relative min-w-0 flex-1 p-4 md:p-6">
-          <div className="mx-auto w-full max-w-[1600px]">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="print:hidden">
+          <Header
+            onToggleSidebar={handleToggleSidebar}
+            title={pageTitle}
+            role={currentRole}
+          />
+        </div>
+
+        <main className="relative min-w-0 flex-1 p-4 md:p-6 print:p-0">
+          <div className="mx-auto w-full max-w-[1600px] print:max-w-none">
             <Outlet />
           </div>
         </main>
 
-        <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3">
+        <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3 print:hidden">
           {isAdmin && (
             <button
               type="button"
@@ -385,7 +389,7 @@ export default function DashboardLayouts() {
         </div>
 
         {showEmailModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4 print:hidden">
             <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
               <button
                 type="button"
@@ -430,7 +434,9 @@ export default function DashboardLayouts() {
           </div>
         )}
 
-        <Footer />
+        <div className="print:hidden">
+          <Footer />
+        </div>
       </div>
     </div>
   );

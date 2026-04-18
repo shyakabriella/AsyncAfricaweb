@@ -270,7 +270,7 @@ export default function Report() {
       return ["all"];
     }
 
-    const found = [
+    return [
       "all",
       ...new Set(
         selectedItem.applications
@@ -278,8 +278,6 @@ export default function Report() {
           .filter(Boolean)
       ),
     ];
-
-    return found;
   }, [activeSection, selectedItem]);
 
   const filteredProgramApplications = useMemo(() => {
@@ -299,245 +297,294 @@ export default function Report() {
   };
 
   return (
-    <>
-      <style>{`
-        @page {
-          size: A4 portrait;
-          margin: 10mm;
-        }
+    <div className="space-y-6 bg-white print:space-y-0">
+      <div className="space-y-6 print:hidden">
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-indigo-600">
+                AsyncAfrica Report Center
+              </p>
+              <h1 className="mt-2 text-2xl font-extrabold text-slate-900 sm:text-3xl">
+                Reports & Analytics
+              </h1>
+              <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-500">
+                Open each report as a card, then open deeper details.
+              </p>
+            </div>
 
-        .print-only-a4 {
-          display: none;
-        }
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={loadReport}
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Refresh
+              </button>
 
-        @media print {
-          body {
-            background: #ffffff !important;
-          }
-
-          .screen-content {
-            display: none !important;
-          }
-
-          .print-only-a4 {
-            display: block !important;
-          }
-
-          .print-sheet {
-            width: 190mm;
-            min-height: 277mm;
-            margin: 0 auto;
-            background: #ffffff;
-            color: #111827;
-          }
-
-          .print-table {
-            width: 100%;
-            border-collapse: collapse;
-          }
-
-          .print-table th,
-          .print-table td {
-            border: 1px solid #d1d5db;
-            padding: 8px;
-            font-size: 11px;
-            text-align: left;
-            vertical-align: top;
-          }
-
-          .print-table th {
-            background: #f8fafc;
-            font-weight: 700;
-          }
-        }
-      `}</style>
-
-      <div className="space-y-6">
-        <div className="screen-content space-y-6">
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-indigo-600">
-                  AsyncAfrica Report Center
-                </p>
-                <h1 className="mt-2 text-2xl font-extrabold text-slate-900 sm:text-3xl">
-                  Reports & Analytics
-                </h1>
-                <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-500">
-                  Open each report as a card, then open deeper details.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap gap-3">
+              {activeSection === "applications" && selectedItem ? (
                 <button
                   type="button"
-                  onClick={loadReport}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                  onClick={exportPdf}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-indigo-700"
                 >
-                  <RefreshCw className="h-4 w-4" />
-                  Refresh
+                  <Download className="h-4 w-4" />
+                  Export PDF
                 </button>
-
-                {activeSection === "applications" && selectedItem ? (
-                  <button
-                    type="button"
-                    onClick={exportPdf}
-                    className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-indigo-700"
-                  >
-                    <Download className="h-4 w-4" />
-                    Export PDF (A4)
-                  </button>
-                ) : null}
-              </div>
+              ) : null}
             </div>
-
-            {error ? (
-              <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                {error}
-              </div>
-            ) : null}
           </div>
 
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search report..."
-                  value={filters.search}
-                  onChange={(e) =>
-                    setFilters((prev) => ({ ...prev, search: e.target.value }))
-                  }
-                  className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 text-sm outline-none focus:border-indigo-500"
-                />
-              </div>
+          {error ? (
+            <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {error}
+            </div>
+          ) : null}
+        </div>
 
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
-                type="date"
-                value={filters.dateFrom}
+                type="text"
+                placeholder="Search report..."
+                value={filters.search}
                 onChange={(e) =>
-                  setFilters((prev) => ({ ...prev, dateFrom: e.target.value }))
+                  setFilters((prev) => ({ ...prev, search: e.target.value }))
                 }
-                className="rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-              />
-
-              <input
-                type="date"
-                value={filters.dateTo}
-                onChange={(e) =>
-                  setFilters((prev) => ({ ...prev, dateTo: e.target.value }))
-                }
-                className="rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 text-sm outline-none focus:border-indigo-500"
               />
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-            {reportSections.map((section) => (
-              <button
-                key={section.key}
-                type="button"
-                onClick={() => setActiveSection(section.key)}
-                className={`rounded-3xl border p-5 text-left shadow-sm transition ${
-                  activeSection === section.key
-                    ? "border-indigo-500 bg-indigo-50"
-                    : "border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white text-indigo-600 shadow-sm">
-                    {section.icon}
-                  </div>
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
-                    {formatNumber(section.count)}
-                  </span>
-                </div>
+            <input
+              type="date"
+              value={filters.dateFrom}
+              onChange={(e) =>
+                setFilters((prev) => ({ ...prev, dateFrom: e.target.value }))
+              }
+              className="rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+            />
 
-                <div className="mt-4">
-                  <h3 className="text-base font-extrabold text-slate-900">
-                    {section.title}
-                  </h3>
-                  <p className="mt-1 text-sm text-slate-500">{section.subtitle}</p>
-                </div>
-              </button>
-            ))}
-          </div>
-
-          <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 px-5 py-5 sm:px-6">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h2 className="text-lg font-extrabold text-slate-900">
-                    {currentSection?.title || "Report Details"}
-                  </h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {activeSection === "applications" && !selectedItem
-                      ? "Click one program card to open the application table."
-                      : !selectedItem
-                      ? "Click one card below to open full details."
-                      : "Detailed opened report information."}
-                  </p>
-                </div>
-
-                {selectedItem ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedItem(null);
-                      setApplicationStatusFilter("all");
-                    }}
-                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                    Back
-                  </button>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="p-5 sm:p-6">
-              {loading ? (
-                <div className="py-16 text-center text-sm text-slate-500">
-                  Loading report...
-                </div>
-              ) : !currentSection ? (
-                <div className="py-16 text-center text-sm text-slate-500">
-                  No report section selected.
-                </div>
-              ) : !selectedItem ? (
-                <SectionGrid
-                  sectionKey={currentSection.key}
-                  items={currentSection.items}
-                  onSelect={setSelectedItem}
-                />
-              ) : activeSection === "applications" ? (
-                <ApplicationProgramDetail
-                  group={selectedItem}
-                  statusFilter={applicationStatusFilter}
-                  setStatusFilter={setApplicationStatusFilter}
-                  statuses={applicationStatuses}
-                  rows={filteredProgramApplications}
-                  onExport={exportPdf}
-                />
-              ) : (
-                <OpenedReport sectionKey={activeSection} item={selectedItem} />
-              )}
-            </div>
+            <input
+              type="date"
+              value={filters.dateTo}
+              onChange={(e) =>
+                setFilters((prev) => ({ ...prev, dateTo: e.target.value }))
+              }
+              className="rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+            />
           </div>
         </div>
 
-        {activeSection === "applications" && selectedItem ? (
-          <div className="print-only-a4">
-            <ApplicationA4Print
-              group={selectedItem}
-              statusFilter={applicationStatusFilter}
-              rows={filteredProgramApplications}
-            />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          {reportSections.map((section) => (
+            <button
+              key={section.key}
+              type="button"
+              onClick={() => setActiveSection(section.key)}
+              className={`rounded-3xl border p-5 text-left shadow-sm transition ${
+                activeSection === section.key
+                  ? "border-indigo-500 bg-indigo-50"
+                  : "border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white text-indigo-600 shadow-sm">
+                  {section.icon}
+                </div>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                  {formatNumber(section.count)}
+                </span>
+              </div>
+
+              <div className="mt-4">
+                <h3 className="text-base font-extrabold text-slate-900">
+                  {section.title}
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">{section.subtitle}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-5 py-5 sm:px-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-lg font-extrabold text-slate-900">
+                  {currentSection?.title || "Report Details"}
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  {activeSection === "applications" && !selectedItem
+                    ? "Click one program card to open the application table."
+                    : !selectedItem
+                    ? "Click one card below to open full details."
+                    : "Detailed opened report information."}
+                </p>
+              </div>
+
+              {selectedItem ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedItem(null);
+                    setApplicationStatusFilter("all");
+                  }}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Back
+                </button>
+              ) : null}
+            </div>
           </div>
-        ) : null}
+
+          <div className="p-5 sm:p-6">
+            {loading ? (
+              <div className="py-16 text-center text-sm text-slate-500">
+                Loading report...
+              </div>
+            ) : !currentSection ? (
+              <div className="py-16 text-center text-sm text-slate-500">
+                No report section selected.
+              </div>
+            ) : !selectedItem ? (
+              <SectionGrid
+                sectionKey={currentSection.key}
+                items={currentSection.items}
+                onSelect={setSelectedItem}
+              />
+            ) : activeSection === "applications" ? (
+              <ApplicationProgramDetail
+                group={selectedItem}
+                statusFilter={applicationStatusFilter}
+                setStatusFilter={setApplicationStatusFilter}
+                statuses={applicationStatuses}
+                rows={filteredProgramApplications}
+                onExport={exportPdf}
+              />
+            ) : (
+              <OpenedReport sectionKey={activeSection} item={selectedItem} />
+            )}
+          </div>
+        </div>
       </div>
-    </>
+
+      {activeSection === "applications" && selectedItem ? (
+        <div className="hidden bg-white text-slate-900 print:block">
+          <div className="mx-auto w-full max-w-[794px] bg-white px-8 py-8">
+            <div className="border-b border-slate-300 pb-4">
+              <div className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-600">
+                AsyncAfrica Applications Report
+              </div>
+              <h1 className="mt-2 text-2xl font-extrabold text-slate-900">
+                {selectedItem?.title || "Program Applications"}
+              </h1>
+              <div className="mt-2 flex flex-wrap gap-4 text-sm text-slate-600">
+                <span>
+                  Status:{" "}
+                  <strong>
+                    {applicationStatusFilter === "all"
+                      ? "All"
+                      : formatStatusLabel(applicationStatusFilter)}
+                  </strong>
+                </span>
+                <span>
+                  Total Rows:{" "}
+                  <strong>{formatNumber(filteredProgramApplications.length)}</strong>
+                </span>
+                <span>
+                  Printed: <strong>{new Date().toLocaleDateString()}</strong>
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-6 overflow-hidden rounded-none border border-slate-300">
+              <table className="w-full border-collapse text-left text-[11px] text-slate-800">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="border border-slate-300 px-2 py-2 font-bold">#</th>
+                    <th className="border border-slate-300 px-2 py-2 font-bold">
+                      Applicant
+                    </th>
+                    <th className="border border-slate-300 px-2 py-2 font-bold">
+                      Email
+                    </th>
+                    <th className="border border-slate-300 px-2 py-2 font-bold">
+                      Phone
+                    </th>
+                    <th className="border border-slate-300 px-2 py-2 font-bold">
+                      Country
+                    </th>
+                    <th className="border border-slate-300 px-2 py-2 font-bold">
+                      City
+                    </th>
+                    <th className="border border-slate-300 px-2 py-2 font-bold">
+                      Status
+                    </th>
+                    <th className="border border-slate-300 px-2 py-2 font-bold">
+                      Submitted
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {filteredProgramApplications.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={8}
+                        className="border border-slate-300 px-2 py-6 text-center"
+                      >
+                        No applications found for this status.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredProgramApplications.map((item, index) => {
+                      const firstName =
+                        item?.first_name || item?.applicant?.first_name || "";
+                      const lastName =
+                        item?.last_name || item?.applicant?.last_name || "";
+                      const fullName = `${firstName} ${lastName}`.trim();
+
+                      return (
+                        <tr key={item?.id || index} className="align-top">
+                          <td className="border border-slate-300 px-2 py-2">
+                            {index + 1}
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2">
+                            {fullName || "-"}
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2 break-words">
+                            {item?.email || item?.applicant?.email || "-"}
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2">
+                            {item?.phone || item?.applicant?.phone || "-"}
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2">
+                            {item?.country || item?.applicant?.country || "-"}
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2">
+                            {item?.city || item?.applicant?.city || "-"}
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2">
+                            {item?.status || "-"}
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2">
+                            {formatDate(item?.submitted_at || item?.created_at)}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -615,7 +662,7 @@ function ApplicationProgramDetail({
 }) {
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl border border-indigo-100 bg-indigo-50 p-5">
+      <div className="rounded-3xl border border-indigo-100 bg-indigo-50 p-5 print:hidden">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <h3 className="text-lg font-extrabold text-slate-900">
@@ -632,7 +679,7 @@ function ApplicationProgramDetail({
             className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-indigo-700"
           >
             <Download className="h-4 w-4" />
-            Export PDF (A4)
+            Export PDF
           </button>
         </div>
 
@@ -646,7 +693,7 @@ function ApplicationProgramDetail({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 print:hidden">
         {statuses.map((status) => (
           <button
             key={status}
@@ -663,7 +710,7 @@ function ApplicationProgramDetail({
         ))}
       </div>
 
-      <div className="overflow-x-auto rounded-3xl border border-slate-200">
+      <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white print:hidden">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-slate-600">
             <tr className="text-left">
@@ -727,100 +774,6 @@ function ApplicationProgramDetail({
           </tbody>
         </table>
       </div>
-    </div>
-  );
-}
-
-function ApplicationA4Print({ group, statusFilter, rows }) {
-  return (
-    <div className="print-sheet">
-      <div style={{ marginBottom: "16px" }}>
-        <div
-          style={{
-            fontSize: "12px",
-            fontWeight: 700,
-            letterSpacing: "0.18em",
-            textTransform: "uppercase",
-            color: "#4f46e5",
-          }}
-        >
-          AsyncAfrica Applications Report
-        </div>
-        <h1
-          style={{
-            marginTop: "8px",
-            fontSize: "22px",
-            fontWeight: 800,
-            color: "#111827",
-          }}
-        >
-          {group?.title || "Program Applications"}
-        </h1>
-        <div
-          style={{
-            marginTop: "6px",
-            fontSize: "12px",
-            color: "#475569",
-          }}
-        >
-          Status Filter:{" "}
-          <strong>
-            {statusFilter === "all" ? "All" : formatStatusLabel(statusFilter)}
-          </strong>
-        </div>
-        <div
-          style={{
-            marginTop: "4px",
-            fontSize: "12px",
-            color: "#475569",
-          }}
-        >
-          Total Rows: <strong>{formatNumber(rows.length)}</strong>
-        </div>
-      </div>
-
-      <table className="print-table">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Applicant</th>
-            <th>Email</th>
-            <th>Phone</th>
-            <th>Country</th>
-            <th>City</th>
-            <th>Status</th>
-            <th>Submitted</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
-            <tr>
-              <td colSpan={8}>No applications found for this status.</td>
-            </tr>
-          ) : (
-            rows.map((item, index) => {
-              const firstName =
-                item?.first_name || item?.applicant?.first_name || "";
-              const lastName =
-                item?.last_name || item?.applicant?.last_name || "";
-              const fullName = `${firstName} ${lastName}`.trim();
-
-              return (
-                <tr key={item?.id || index}>
-                  <td>{index + 1}</td>
-                  <td>{fullName || "-"}</td>
-                  <td>{item?.email || item?.applicant?.email || "-"}</td>
-                  <td>{item?.phone || item?.applicant?.phone || "-"}</td>
-                  <td>{item?.country || item?.applicant?.country || "-"}</td>
-                  <td>{item?.city || item?.applicant?.city || "-"}</td>
-                  <td>{item?.status || "-"}</td>
-                  <td>{formatDate(item?.submitted_at || item?.created_at)}</td>
-                </tr>
-              );
-            })
-          )}
-        </tbody>
-      </table>
     </div>
   );
 }
