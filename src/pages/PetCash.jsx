@@ -351,10 +351,12 @@ export default function PetCash() {
   const [loading, setLoading] = useState(true);
   const [loadingPrograms, setLoadingPrograms] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [creatingIntake, setCreatingIntake] = useState(false);
   const [actionId, setActionId] = useState(null);
 
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [showCreateIntake, setShowCreateIntake] = useState(false);
 
   const [filters, setFilters] = useState({
     search: "",
@@ -370,6 +372,12 @@ export default function PetCash() {
     description: "",
     amount: "",
     currency: "RWF",
+  });
+
+  const [intakeForm, setIntakeForm] = useState({
+    name: "",
+    description: "",
+    is_active: true,
   });
 
   useEffect(() => {
@@ -422,7 +430,7 @@ export default function PetCash() {
   }, [programs, applications]);
 
   const intakeOptions = useMemo(() => {
-    return intakes.sort((a, b) =>
+    return [...intakes].sort((a, b) =>
       String(a?.name || "").localeCompare(String(b?.name || ""))
     );
   }, [intakes]);
@@ -520,12 +528,71 @@ export default function PetCash() {
     });
   }
 
+  function resetIntakeForm() {
+    setIntakeForm({
+      name: "",
+      description: "",
+      is_active: true,
+    });
+  }
+
   function handleIntakeChange(value) {
     setForm((prev) => ({
       ...prev,
       intake_id: value,
       program_id: "",
     }));
+  }
+
+  async function handleCreateIntake(e) {
+    e.preventDefault();
+    setCreatingIntake(true);
+    setError("");
+    setNotice("");
+
+    try {
+      if (!intakeForm.name.trim()) {
+        throw new Error("Intake name is required.");
+      }
+
+      const response = await fetch(`${API_BASE}/intakes`, {
+        method: "POST",
+        headers: buildHeaders(true),
+        body: JSON.stringify({
+          name: intakeForm.name.trim(),
+          description: intakeForm.description.trim(),
+          is_active: !!intakeForm.is_active,
+        }),
+      });
+
+      const payload = await readJson(response);
+
+      if (!response.ok || payload.success === false) {
+        throw new Error(
+          extractErrorMessage(payload, "Failed to create intake.")
+        );
+      }
+
+      const createdIntake = payload?.data || null;
+
+      setNotice(payload?.message || "Intake created successfully.");
+      resetIntakeForm();
+      setShowCreateIntake(false);
+
+      await loadPage();
+
+      if (createdIntake?.id) {
+        setForm((prev) => ({
+          ...prev,
+          intake_id: String(createdIntake.id),
+          program_id: "",
+        }));
+      }
+    } catch (err) {
+      setError(err?.message || "Failed to create intake.");
+    } finally {
+      setCreatingIntake(false);
+    }
   }
 
   async function handleCreateRequest(e) {
@@ -840,7 +907,115 @@ export default function PetCash() {
                     </option>
                   ))}
                 </select>
+
+                <div className="mt-3 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateIntake((prev) => !prev)}
+                    className="rounded-xl border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100"
+                  >
+                    {showCreateIntake ? "Close Intake Form" : "Create Intake"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={loadPage}
+                    className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Refresh Intakes
+                  </button>
+                </div>
               </div>
+
+              {showCreateIntake && (
+                <div className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4">
+                  <div className="mb-3">
+                    <h3 className="text-base font-bold text-slate-900">
+                      Create Intake
+                    </h3>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Add a new intake without leaving this page.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleCreateIntake} className="space-y-4">
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">
+                        Intake Name
+                      </label>
+                      <input
+                        type="text"
+                        value={intakeForm.name}
+                        onChange={(e) =>
+                          setIntakeForm((prev) => ({
+                            ...prev,
+                            name: e.target.value,
+                          }))
+                        }
+                        placeholder="Example: May 2026 Intake"
+                        className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                        disabled={creatingIntake}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">
+                        Description
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={intakeForm.description}
+                        onChange={(e) =>
+                          setIntakeForm((prev) => ({
+                            ...prev,
+                            description: e.target.value,
+                          }))
+                        }
+                        placeholder="Write a short description for this intake"
+                        className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                        disabled={creatingIntake}
+                      />
+                    </div>
+
+                    <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={intakeForm.is_active}
+                        onChange={(e) =>
+                          setIntakeForm((prev) => ({
+                            ...prev,
+                            is_active: e.target.checked,
+                          }))
+                        }
+                        disabled={creatingIntake}
+                      />
+                      Active intake
+                    </label>
+
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        type="submit"
+                        disabled={creatingIntake}
+                        className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {creatingIntake ? "Creating..." : "Save Intake"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          resetIntakeForm();
+                          setShowCreateIntake(false);
+                        }}
+                        disabled={creatingIntake}
+                        className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
 
               <div>
                 <label className="mb-2 block text-sm font-semibold text-slate-700">
