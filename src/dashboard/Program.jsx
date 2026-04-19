@@ -74,6 +74,34 @@ function normalizeProgram(item) {
   };
 }
 
+function programToPayload(program, overrides = {}) {
+  const merged = { ...program, ...overrides };
+
+  return {
+    code: merged.code || "",
+    name: merged.name || "",
+    category: merged.category || "",
+    duration: merged.duration || "",
+    level: merged.level || "",
+    format: merged.format || "",
+    status: merged.status || "Active",
+    instructor: merged.instructor || "",
+    students: Number(merged.students || 0),
+    start_date: merged.startDate || "",
+    end_date: merged.endDate || "",
+    image: merged.image || "",
+    intro: merged.intro || "",
+    description: merged.description || "",
+    overview: merged.overview || "",
+    icon_key: merged.icon_key || "",
+    objectives: safeArray(merged.objectives),
+    modules: safeArray(merged.modules),
+    skills: safeArray(merged.skills),
+    outcomes: safeArray(merged.outcomes),
+    tools: safeArray(merged.tools),
+  };
+}
+
 function formatDateLabel(value) {
   if (!value) return "-";
 
@@ -104,8 +132,9 @@ export default function Program() {
   const token =
     localStorage.getItem("token") || sessionStorage.getItem("token");
 
-  const buildHeaders = () => ({
+  const buildHeaders = (includeJson = false) => ({
     Accept: "application/json",
+    ...(includeJson ? { "Content-Type": "application/json" } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   });
 
@@ -120,6 +149,19 @@ export default function Program() {
     return result?.message || result?.error || "Request failed.";
   };
 
+  const readResponse = async (response) => {
+    const text = await response.text();
+    let result = {};
+
+    try {
+      result = text ? JSON.parse(text) : {};
+    } catch {
+      result = { message: text || "Unable to read server response." };
+    }
+
+    return result;
+  };
+
   const fetchPrograms = async () => {
     try {
       setLoading(true);
@@ -130,14 +172,7 @@ export default function Program() {
         headers: buildHeaders(),
       });
 
-      const text = await response.text();
-      let result = {};
-
-      try {
-        result = text ? JSON.parse(text) : {};
-      } catch {
-        result = { message: text || "Unable to read server response." };
-      }
+      const result = await readResponse(response);
 
       if (!response.ok) {
         throw new Error(buildErrorMessage(result));
@@ -240,34 +275,54 @@ export default function Program() {
     setShowModal(true);
   };
 
-  const handleDelete = async (id) => {
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this program?"
+  const updateProgramStatus = async (program, nextStatus) => {
+    const payload = programToPayload(program, { status: nextStatus });
+
+    let response = await fetch(`${API_BASE_URL}/programs/${program.id}`, {
+      method: "PATCH",
+      headers: buildHeaders(true),
+      body: JSON.stringify(payload),
+    });
+
+    let result = await readResponse(response);
+
+    if (!response.ok) {
+      response = await fetch(`${API_BASE_URL}/programs/${program.id}`, {
+        method: "PUT",
+        headers: buildHeaders(true),
+        body: JSON.stringify(payload),
+      });
+
+      result = await readResponse(response);
+    }
+
+    if (!response.ok) {
+      throw new Error(buildErrorMessage(result));
+    }
+
+    const updatedProgram = normalizeProgram(result?.data || result || payload);
+
+    setPrograms((prev) =>
+      prev.map((item) => (item.id === program.id ? updatedProgram : item))
     );
+  };
+
+  const handleArchiveToggle = async (program) => {
+    const isArchived = program.status === "Archived";
+    const nextStatus = isArchived ? "Active" : "Archived";
+
+    const confirmed = window.confirm(
+      isArchived
+        ? "Are you sure you want to activate this program again?"
+        : "Are you sure you want to archive this program?"
+    );
+
     if (!confirmed) return;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/programs/${id}`, {
-        method: "DELETE",
-        headers: buildHeaders(),
-      });
-
-      const text = await response.text();
-      let result = {};
-
-      try {
-        result = text ? JSON.parse(text) : {};
-      } catch {
-        result = { message: text || "Unable to read server response." };
-      }
-
-      if (!response.ok) {
-        throw new Error(buildErrorMessage(result));
-      }
-
-      setPrograms((prev) => prev.filter((item) => item.id !== id));
+      await updateProgramStatus(program, nextStatus);
     } catch (error) {
-      alert(error.message || "Failed to delete program.");
+      alert(error.message || `Failed to ${isArchived ? "activate" : "archive"} program.`);
     }
   };
 
@@ -309,7 +364,7 @@ export default function Program() {
               Manage Programs
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              Create, edit, search and manage training programs from one place.
+              Create, edit, search and archive training programs from one place.
             </p>
           </div>
 
@@ -435,7 +490,7 @@ export default function Program() {
             </div>
           ) : filteredPrograms.length ? (
             <div className="min-w-[1200px]">
-              <div className="grid grid-cols-[1.15fr_0.7fr_0.65fr_0.65fr_0.65fr_0.55fr_0.75fr_0.8fr_0.95fr_0.75fr] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              <div className="grid grid-cols-[1.15fr_0.7fr_0.65fr_0.65fr_0.65fr_0.55fr_0.75fr_0.8fr_0.95fr_0.95fr] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                 <div>Program</div>
                 <div>Category</div>
                 <div>Duration</div>
@@ -455,7 +510,7 @@ export default function Program() {
                     item={item}
                     onOpen={openDetails}
                     onEdit={handleEdit}
-                    onDelete={handleDelete}
+                    onArchiveToggle={handleArchiveToggle}
                   />
                 ))}
               </div>
@@ -482,11 +537,13 @@ export default function Program() {
   );
 }
 
-function ProgramRow({ item, onOpen, onEdit, onDelete }) {
+function ProgramRow({ item, onOpen, onEdit, onArchiveToggle }) {
+  const isArchived = item.status === "Archived";
+
   return (
     <div
       onClick={() => onOpen(item)}
-      className="grid cursor-pointer grid-cols-[1.15fr_0.7fr_0.65fr_0.65fr_0.65fr_0.55fr_0.75fr_0.8fr_0.95fr_0.75fr] gap-3 px-4 py-3 transition hover:bg-slate-50"
+      className="grid cursor-pointer grid-cols-[1.15fr_0.7fr_0.65fr_0.65fr_0.65fr_0.55fr_0.75fr_0.8fr_0.95fr_0.95fr] gap-3 px-4 py-3 transition hover:bg-slate-50"
     >
       <div className="min-w-0">
         <div className="flex items-center gap-3">
@@ -555,11 +612,16 @@ function ProgramRow({ item, onOpen, onEdit, onDelete }) {
         >
           Edit
         </button>
+
         <button
-          onClick={() => onDelete(item.id)}
-          className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100"
+          onClick={() => onArchiveToggle(item)}
+          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+            isArchived
+              ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+              : "bg-amber-50 text-amber-700 hover:bg-amber-100"
+          }`}
         >
-          Delete
+          {isArchived ? "Activate" : "Archive"}
         </button>
       </div>
     </div>

@@ -212,6 +212,9 @@ export default function Sidebar({ open = true, onClose = () => {} }) {
   const isAgent = role === "agent";
   const isSchoolOwner = role === "school_owner";
 
+  // Admin and CEO now share the same access
+  const hasAdminAccess = isAdmin || isCeo;
+
   const logout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("auth_token");
@@ -366,7 +369,7 @@ export default function Sidebar({ open = true, onClose = () => {} }) {
                   onClick={handleMobileClose}
                 />
 
-                {isAdmin && (
+                {hasAdminAccess && (
                   <>
                     <Item
                       to="/dashboard/users"
@@ -414,29 +417,6 @@ export default function Sidebar({ open = true, onClose = () => {} }) {
                       to="/dashboard/settings"
                       label="Settings"
                       icon={<IconSettings />}
-                      onClick={handleMobileClose}
-                    />
-                  </>
-                )}
-
-                {isCeo && (
-                  <>
-                    <Item
-                      to="/dashboard/agents"
-                      label="Agents"
-                      icon={<IconAgent />}
-                      onClick={handleMobileClose}
-                    />
-                    <Item
-                      to="/dashboard/pet-cash"
-                      label="Pet Cash"
-                      icon={<IconPetCash />}
-                      onClick={handleMobileClose}
-                    />
-                    <Item
-                      to="/dashboard/report"
-                      label="Report"
-                      icon={<IconReport />}
                       onClick={handleMobileClose}
                     />
                   </>
