@@ -115,9 +115,7 @@ function normalizeApiBase() {
     "http://127.0.0.1:8000/api";
 
   const cleaned = String(raw).replace(/\/+$/, "");
-
-  if (cleaned.endsWith("/api")) return cleaned;
-  return `${cleaned}/api`;
+  return cleaned.endsWith("/api") ? cleaned : `${cleaned}/api`;
 }
 
 function buildHeaders(withJson = false) {
@@ -160,17 +158,37 @@ function extractErrorMessage(payload, fallback = "Something went wrong.") {
   return fallback;
 }
 
+function extractCollection(payload) {
+  if (Array.isArray(payload?.data?.data)) return payload.data.data;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload)) return payload;
+  return [];
+}
+
+function normalizeStatus(value) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizeText(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function toNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
 function formatMoney(value, currency = "RWF") {
-  const amount = Number(value || 0);
+  const amount = toNumber(value);
 
   try {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
-      currency: currency || "RWF",
+      currency,
       maximumFractionDigits: 2,
     }).format(amount);
   } catch {
-    return `${currency || "RWF"} ${amount.toLocaleString()}`;
+    return `${amount.toLocaleString()} ${currency}`;
   }
 }
 
@@ -178,13 +196,17 @@ function formatDateTime(value) {
   if (!value) return "-";
 
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
+  if (Number.isNaN(date.getTime())) return String(value);
 
   return date.toLocaleString();
 }
 
+function isArchivedProgram(program) {
+  return normalizeStatus(program?.status) === "archived";
+}
+
 function statusClasses(status) {
-  const value = String(status || "").toLowerCase();
+  const value = normalizeStatus(status);
 
   if (value === "approved") {
     return "bg-emerald-100 text-emerald-700 border border-emerald-200";
@@ -197,9 +219,122 @@ function statusClasses(status) {
   return "bg-amber-100 text-amber-700 border border-amber-200";
 }
 
-function isSelectableProgram(program) {
-  const status = String(program?.status || "").trim().toLowerCase();
-  return status !== "archived";
+function createProgramLookup(programs) {
+  const byId = new Map();
+  const bySlug = new Map();
+  const byTitle = new Map();
+
+  programs.forEach((program) => {
+    if (program?.id !== undefined && program?.id !== null) {
+      byId.set(String(program.id), program);
+    }
+
+    if (program?.slug) {
+      bySlug.set(normalizeText(program.slug), program);
+    }
+
+    [program?.name, program?.title, program?.program_title]
+      .filter(Boolean)
+      .forEach((name) => {
+        byTitle.set(normalizeText(name), program);
+      });
+  });
+
+  return { byId, bySlug, byTitle };
+}
+
+function resolveProgramFromApplication(application, lookup) {
+  return (
+    lookup.byId.get(String(application?.program_id || application?.program?.id || "")) ||
+    lookup.bySlug.get(normalizeText(application?.program_slug || application?.program?.slug || "")) ||
+    lookup.byTitle.get(
+      normalizeText(
+        application?.program_title ||
+          application?.program?.title ||
+          application?.program?.name ||
+          ""
+      )
+    ) ||
+    null
+  );
+}
+
+function buildProgramStats(programs, applications) {
+  const lookup = createProgramLookup(programs);
+  const map = new Map();
+
+  programs.forEach((program) => {
+    const id = String(program.id);
+
+    map.set(id, {
+      ...program,
+      totalApplications: 0,
+      acceptedCount: 0,
+      pendingCount: 0,
+      rejectedCount: 0,
+      reviewedCount: 0,
+      waitlistedCount: 0,
+      currentBalance: 0,
+      totalCollected: 0,
+      applications: [],
+    });
+  });
+
+  applications.forEach((application) => {
+    const matchedProgram = resolveProgramFromApplication(application, lookup);
+    if (!matchedProgram) return;
+    if (isArchivedProgram(matchedProgram)) return;
+
+    const id = String(matchedProgram.id);
+    const existing = map.get(id);
+
+    if (!existing) return;
+
+    const status = normalizeStatus(application?.status);
+
+    existing.totalApplications += 1;
+    existing.applications.push(application);
+
+    if (status === "accepted") existing.acceptedCount += 1;
+    if (status === "pending") existing.pendingCount += 1;
+    if (status === "rejected") existing.rejectedCount += 1;
+    if (status === "reviewed") existing.reviewedCount += 1;
+    if (status === "waitlisted") existing.waitlistedCount += 1;
+  });
+
+  return Array.from(map.values())
+    .map((program) => {
+      const price = toNumber(program?.price || 0);
+      const currentBalance = price * toNumber(program.acceptedCount);
+
+      return {
+        ...program,
+        feePerStudent: price,
+        currentBalance,
+        totalCollected: currentBalance,
+      };
+    })
+    .sort((a, b) =>
+      String(a?.name || "").localeCompare(String(b?.name || ""))
+    );
+}
+
+function findProgramStatsForRequest(item, programStats) {
+  const lookup = createProgramLookup(programStats);
+
+  return (
+    lookup.byId.get(String(item?.program_id || item?.program?.id || "")) ||
+    lookup.bySlug.get(normalizeText(item?.program?.slug || item?.program_slug || "")) ||
+    lookup.byTitle.get(
+      normalizeText(
+        item?.program?.name ||
+          item?.program?.title ||
+          item?.program_title ||
+          ""
+      )
+    ) ||
+    null
+  );
 }
 
 function SmallStat({ title, value, hint }) {
@@ -212,16 +347,64 @@ function SmallStat({ title, value, hint }) {
   );
 }
 
+function ProgramSummaryCard({ item, onSelect }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(item)}
+      className="rounded-3xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-indigo-300 hover:bg-indigo-50"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-extrabold text-slate-900">
+            {item?.name || "Program"}
+          </h3>
+          <p className="mt-1 text-sm text-slate-500">
+            {item?.category || "No category"}
+          </p>
+        </div>
+
+        <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-700">
+          {item?.status || "Active"}
+        </span>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <MiniMetric label="Fee" value={formatMoney(item?.feePerStudent || 0)} />
+        <MiniMetric label="Accepted" value={item?.acceptedCount || 0} />
+        <MiniMetric label="Applications" value={item?.totalApplications || 0} />
+        <MiniMetric label="Balance" value={formatMoney(item?.currentBalance || 0)} />
+      </div>
+
+      <p className="mt-3 text-xs font-semibold text-indigo-600">
+        Click to select this program
+      </p>
+    </button>
+  );
+}
+
+function MiniMetric({ label, value }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+      <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+        {label}
+      </div>
+      <div className="mt-2 text-sm font-bold text-slate-900">{String(value || "-")}</div>
+    </div>
+  );
+}
+
 export default function PetCash() {
   const API_BASE = normalizeApiBase();
 
   const storedUser = getStoredUser();
   const role = normalizeRole(getStoredRole() || getRoleFromUser(storedUser));
   const canManage = role === "admin" || role === "ceo";
+  const currentUserId = storedUser?.id;
 
-  const [requests, setRequests] = useState([]);
   const [programs, setPrograms] = useState([]);
-  const [summary, setSummary] = useState(null);
+  const [applications, setApplications] = useState([]);
+  const [requests, setRequests] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [loadingPrograms, setLoadingPrograms] = useState(true);
@@ -246,117 +429,119 @@ export default function PetCash() {
     currency: "RWF",
   });
 
-  const computedSummary = useMemo(() => {
-    if (summary) return summary;
-
-    const totalRequested = requests.reduce(
-      (sum, item) => sum + Number(item?.amount || 0),
-      0
-    );
-
-    const totalApproved = requests
-      .filter((item) => String(item?.status || "").toLowerCase() === "approved")
-      .reduce((sum, item) => sum + Number(item?.amount || 0), 0);
-
-    return {
-      total_requests: requests.length,
-      pending_requests: requests.filter(
-        (item) => String(item?.status || "").toLowerCase() === "pending"
-      ).length,
-      approved_requests: requests.filter(
-        (item) => String(item?.status || "").toLowerCase() === "approved"
-      ).length,
-      rejected_requests: requests.filter(
-        (item) => String(item?.status || "").toLowerCase() === "rejected"
-      ).length,
-      total_requested_amount: totalRequested,
-      total_approved_amount: totalApproved,
-    };
-  }, [requests, summary]);
-
-  const selectablePrograms = useMemo(
-    () => programs.filter(isSelectableProgram),
-    [programs]
-  );
-
-  const selectedProgram = useMemo(() => {
-    return selectablePrograms.find(
-      (item) => String(item?.id) === String(form.program_id)
-    ) || null;
-  }, [selectablePrograms, form.program_id]);
-
   useEffect(() => {
     if (!canManage) return;
-
-    fetchPrograms();
-    fetchRequests();
+    loadPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canManage]);
 
-  async function fetchPrograms() {
-    setLoadingPrograms(true);
-    setError("");
-
-    try {
-      const response = await fetch(`${API_BASE}/programs`, {
-        method: "GET",
-        headers: buildHeaders(),
-      });
-
-      const payload = await readJson(response);
-
-      if (!response.ok || payload.success === false) {
-        throw new Error(extractErrorMessage(payload, "Failed to load programs."));
-      }
-
-      const data = Array.isArray(payload?.data)
-        ? payload.data
-        : Array.isArray(payload)
-        ? payload
-        : [];
-
-      setPrograms(data.filter(isSelectableProgram));
-    } catch (err) {
-      setError(err.message || "Failed to load programs.");
-      setPrograms([]);
-    } finally {
-      setLoadingPrograms(false);
-    }
-  }
-
-  async function fetchRequests(customFilters = filters) {
+  async function loadPage() {
     setLoading(true);
+    setLoadingPrograms(true);
     setError("");
     setNotice("");
 
     try {
-      const params = new URLSearchParams();
+      const [programsRes, applicationsRes, requestsRes] = await Promise.all([
+        apiGet(`${API_BASE}/programs`),
+        apiGet(`${API_BASE}/applications?per_page=1000`),
+        apiGet(`${API_BASE}/pet-cash-requests`),
+      ]);
 
-      if (customFilters.search) params.set("search", customFilters.search);
-      if (customFilters.status) params.set("status", customFilters.status);
-      if (customFilters.mine) params.set("mine", "1");
+      const allPrograms = extractCollection(programsRes);
+      const activePrograms = allPrograms.filter((program) => !isArchivedProgram(program));
 
-      const response = await fetch(`${API_BASE}/pet-cash-requests?${params.toString()}`, {
-        method: "GET",
-        headers: buildHeaders(),
-      });
-
-      const payload = await readJson(response);
-
-      if (!response.ok || payload.success === false) {
-        throw new Error(
-          extractErrorMessage(payload, "Failed to load pet cash requests.")
-        );
-      }
-
-      setRequests(Array.isArray(payload?.data) ? payload.data : []);
-      setSummary(payload?.summary || null);
+      setPrograms(activePrograms);
+      setApplications(extractCollection(applicationsRes));
+      setRequests(extractCollection(requestsRes));
     } catch (err) {
-      setError(err.message || "Failed to load pet cash requests.");
+      setError(err?.message || "Failed to load pet cash page.");
+      setPrograms([]);
+      setApplications([]);
+      setRequests([]);
     } finally {
       setLoading(false);
+      setLoadingPrograms(false);
     }
   }
+
+  const programStats = useMemo(() => {
+    return buildProgramStats(programs, applications);
+  }, [programs, applications]);
+
+  const selectedProgram = useMemo(() => {
+    return (
+      programStats.find((item) => String(item?.id) === String(form.program_id)) ||
+      null
+    );
+  }, [programStats, form.program_id]);
+
+  const overallSummary = useMemo(() => {
+    const totalPrograms = programStats.length;
+    const totalAcceptedStudents = programStats.reduce(
+      (sum, item) => sum + toNumber(item?.acceptedCount),
+      0
+    );
+    const totalApplications = programStats.reduce(
+      (sum, item) => sum + toNumber(item?.totalApplications),
+      0
+    );
+    const totalBalance = programStats.reduce(
+      (sum, item) => sum + toNumber(item?.currentBalance),
+      0
+    );
+
+    return {
+      totalPrograms,
+      totalAcceptedStudents,
+      totalApplications,
+      totalBalance,
+    };
+  }, [programStats]);
+
+  const requestSummary = useMemo(() => {
+    const totalRequested = requests.reduce(
+      (sum, item) => sum + toNumber(item?.amount),
+      0
+    );
+
+    const approvedRequested = requests
+      .filter((item) => normalizeStatus(item?.status) === "approved")
+      .reduce((sum, item) => sum + toNumber(item?.amount), 0);
+
+    return {
+      totalRequests: requests.length,
+      pending: requests.filter((item) => normalizeStatus(item?.status) === "pending").length,
+      approved: requests.filter((item) => normalizeStatus(item?.status) === "approved").length,
+      rejected: requests.filter((item) => normalizeStatus(item?.status) === "rejected").length,
+      totalRequested,
+      approvedRequested,
+    };
+  }, [requests]);
+
+  const filteredRequests = useMemo(() => {
+    return requests.filter((item) => {
+      const search = normalizeText(filters.search);
+      const status = normalizeStatus(filters.status);
+      const itemStatus = normalizeStatus(item?.status);
+
+      const haystack = normalizeText([
+        item?.title,
+        item?.purpose,
+        item?.description,
+        item?.program?.name,
+        item?.program_title,
+        item?.code,
+        item?.requested_by?.name,
+      ].filter(Boolean).join(" "));
+
+      const matchesSearch = !search || haystack.includes(search);
+      const matchesStatus = !status || itemStatus === status;
+      const matchesMine = !filters.mine || String(item?.requested_by?.id || "") === String(currentUserId || "");
+
+      return matchesSearch && matchesStatus && matchesMine;
+    });
+  }, [requests, filters, currentUserId]);
 
   function resetForm() {
     setForm({
@@ -369,6 +554,13 @@ export default function PetCash() {
     });
   }
 
+  function handleSelectProgram(program) {
+    setForm((prev) => ({
+      ...prev,
+      program_id: String(program?.id || ""),
+    }));
+  }
+
   async function handleCreateRequest(e) {
     e.preventDefault();
     setSubmitting(true);
@@ -376,19 +568,10 @@ export default function PetCash() {
     setNotice("");
 
     try {
-      if (!form.program_id) {
-        throw new Error("Please select a program.");
-      }
-
-      if (!form.title.trim()) {
-        throw new Error("Title is required.");
-      }
-
-      if (!form.purpose.trim()) {
-        throw new Error("Purpose is required.");
-      }
-
-      if (!form.amount || Number(form.amount) <= 0) {
+      if (!form.program_id) throw new Error("Please select a program.");
+      if (!form.title.trim()) throw new Error("Title is required.");
+      if (!form.purpose.trim()) throw new Error("Purpose is required.");
+      if (!form.amount || toNumber(form.amount) <= 0) {
         throw new Error("Amount must be greater than 0.");
       }
 
@@ -400,7 +583,7 @@ export default function PetCash() {
           title: form.title.trim(),
           purpose: form.purpose.trim(),
           description: form.description.trim(),
-          amount: Number(form.amount),
+          amount: toNumber(form.amount),
           currency: form.currency || "RWF",
         }),
       });
@@ -415,10 +598,9 @@ export default function PetCash() {
 
       setNotice(payload?.message || "Pet cash request created successfully.");
       resetForm();
-      await fetchRequests();
-      await fetchPrograms();
+      await loadPage();
     } catch (err) {
-      setError(err.message || "Failed to create pet cash request.");
+      setError(err?.message || "Failed to create pet cash request.");
     } finally {
       setSubmitting(false);
     }
@@ -454,10 +636,9 @@ export default function PetCash() {
       }
 
       setNotice(payload?.message || "Pet cash request approved successfully.");
-      await fetchRequests();
-      await fetchPrograms();
+      await loadPage();
     } catch (err) {
-      setError(err.message || "Failed to approve pet cash request.");
+      setError(err?.message || "Failed to approve pet cash request.");
     } finally {
       setActionId(null);
     }
@@ -498,10 +679,9 @@ export default function PetCash() {
       }
 
       setNotice(payload?.message || "Pet cash request rejected successfully.");
-      await fetchRequests();
-      await fetchPrograms();
+      await loadPage();
     } catch (err) {
-      setError(err.message || "Failed to reject pet cash request.");
+      setError(err?.message || "Failed to reject pet cash request.");
     } finally {
       setActionId(null);
     }
@@ -533,29 +713,12 @@ export default function PetCash() {
       }
 
       setNotice(payload?.message || "Pet cash request deleted successfully.");
-      await fetchRequests();
-      await fetchPrograms();
+      await loadPage();
     } catch (err) {
-      setError(err.message || "Failed to delete pet cash request.");
+      setError(err?.message || "Failed to delete pet cash request.");
     } finally {
       setActionId(null);
     }
-  }
-
-  function handleApplyFilters(e) {
-    e.preventDefault();
-    fetchRequests(filters);
-  }
-
-  function handleResetFilters() {
-    const next = {
-      search: "",
-      status: "",
-      mine: false,
-    };
-
-    setFilters(next);
-    fetchRequests(next);
   }
 
   if (!canManage) {
@@ -579,21 +742,20 @@ export default function PetCash() {
         <div className="rounded-3xl bg-gradient-to-r from-indigo-600 to-violet-600 p-6 text-white shadow-lg">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <h1 className="text-2xl font-extrabold md:text-3xl">Pet Cash Management</h1>
+              <h1 className="text-2xl font-extrabold md:text-3xl">
+                Pet Cash Management
+              </h1>
               <p className="mt-2 max-w-3xl text-sm text-white/85">
-                Create, review, approve, reject, and track pet cash requests for programs.
+                Program balance is calculated from accepted students multiplied by the program fee.
               </p>
             </div>
 
             <button
               type="button"
-              onClick={() => {
-                fetchPrograms();
-                fetchRequests();
-              }}
+              onClick={loadPage}
               className="inline-flex items-center justify-center rounded-2xl bg-white px-4 py-3 text-sm font-bold text-indigo-700 transition hover:bg-indigo-50"
             >
-              Refresh List
+              Refresh Page
             </button>
           </div>
         </div>
@@ -612,35 +774,90 @@ export default function PetCash() {
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <SmallStat
+            title="Programs"
+            value={overallSummary.totalPrograms}
+            hint="Active programs only"
+          />
+          <SmallStat
+            title="Accepted Students"
+            value={overallSummary.totalAcceptedStudents}
+            hint="Students counted as paid"
+          />
+          <SmallStat
+            title="Applications"
+            value={overallSummary.totalApplications}
+            hint="All loaded applications"
+          />
+          <SmallStat
+            title="Total Balance"
+            value={formatMoney(overallSummary.totalBalance)}
+            hint="Accepted × fee"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <SmallStat
             title="Total Requests"
-            value={computedSummary?.total_requests ?? 0}
+            value={requestSummary.totalRequests}
             hint="All pet cash requests"
           />
           <SmallStat
             title="Pending"
-            value={computedSummary?.pending_requests ?? 0}
+            value={requestSummary.pending}
             hint="Waiting for decision"
           />
           <SmallStat
             title="Approved"
-            value={computedSummary?.approved_requests ?? 0}
+            value={requestSummary.approved}
             hint="Approved requests"
           />
           <SmallStat
             title="Approved Amount"
-            value={formatMoney(computedSummary?.total_approved_amount || 0, "RWF")}
-            hint="Total approved money"
+            value={formatMoney(requestSummary.approvedRequested)}
+            hint="Approved request money"
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[400px_minmax(0,1fr)]">
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-xl font-extrabold text-slate-900">
+              Program Financial Summary
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              This follows the same working logic as your report page:
+              accepted students × fee.
+            </p>
+          </div>
+
+          {loading ? (
+            <div className="py-10 text-center text-sm text-slate-500">
+              Loading program summary...
+            </div>
+          ) : programStats.length === 0 ? (
+            <div className="py-10 text-center text-sm text-slate-500">
+              No active programs found.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {programStats.map((item) => (
+                <ProgramSummaryCard
+                  key={item.id}
+                  item={item}
+                  onSelect={handleSelectProgram}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-4">
               <h2 className="text-xl font-extrabold text-slate-900">
                 New Pet Cash Request
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                Create a request linked to a program.
+                Select a program and create a request.
               </p>
             </div>
 
@@ -660,11 +877,12 @@ export default function PetCash() {
                   <option value="">
                     {loadingPrograms
                       ? "Loading programs..."
-                      : selectablePrograms.length
+                      : programStats.length
                       ? "Select program"
                       : "No available program"}
                   </option>
-                  {selectablePrograms.map((program) => (
+
+                  {programStats.map((program) => (
                     <option key={program.id} value={program.id}>
                       {program.name}
                     </option>
@@ -678,36 +896,31 @@ export default function PetCash() {
                     Selected Program Balance
                   </div>
 
-                  <div className="mt-3 space-y-2 text-sm text-slate-700">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-semibold">Program</span>
-                      <span>{selectedProgram?.name || "-"}</span>
-                    </div>
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <MiniMetric
+                      label="Fee"
+                      value={formatMoney(selectedProgram.feePerStudent || 0)}
+                    />
+                    <MiniMetric
+                      label="Accepted"
+                      value={selectedProgram.acceptedCount || 0}
+                    />
+                    <MiniMetric
+                      label="Applications"
+                      value={selectedProgram.totalApplications || 0}
+                    />
+                    <MiniMetric
+                      label="Balance"
+                      value={formatMoney(selectedProgram.currentBalance || 0)}
+                    />
+                  </div>
 
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-semibold">Fee per student</span>
-                      <span>{formatMoney(selectedProgram?.fee_per_student || selectedProgram?.price || 0, "RWF")}</span>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-semibold">Accepted students</span>
-                      <span>{Number(selectedProgram?.accepted_students_count || 0)}</span>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-semibold">Current balance</span>
-                      <span className="font-extrabold text-indigo-700">
-                        {formatMoney(selectedProgram?.current_balance || 0, "RWF")}
-                      </span>
-                    </div>
-
-                    <div className="rounded-xl bg-white px-3 py-2 text-xs text-slate-600">
-                      Formula: {Number(selectedProgram?.accepted_students_count || 0)} ×{" "}
-                      {formatMoney(selectedProgram?.fee_per_student || selectedProgram?.price || 0, "RWF")} ={" "}
-                      <span className="font-bold text-slate-800">
-                        {formatMoney(selectedProgram?.current_balance || 0, "RWF")}
-                      </span>
-                    </div>
+                  <div className="mt-3 rounded-xl bg-white px-3 py-2 text-xs text-slate-600">
+                    Formula: {selectedProgram.acceptedCount || 0} ×{" "}
+                    {formatMoney(selectedProgram.feePerStudent || 0)} ={" "}
+                    <span className="font-bold text-slate-800">
+                      {formatMoney(selectedProgram.currentBalance || 0)}
+                    </span>
                   </div>
                 </div>
               ) : null}
@@ -722,7 +935,7 @@ export default function PetCash() {
                   onChange={(e) =>
                     setForm((prev) => ({ ...prev, title: e.target.value }))
                   }
-                  placeholder="Example: Class materials purchase"
+                  placeholder="Example: Training materials purchase"
                   className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                   disabled={submitting}
                 />
@@ -823,14 +1036,14 @@ export default function PetCash() {
                   Filter Requests
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Search and narrow the list.
+                  Search and narrow the request list.
                 </p>
               </div>
 
-              <form onSubmit={handleApplyFilters} className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_180px_auto_auto]">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_180px_auto_auto]">
                 <input
                   type="text"
-                  placeholder="Search by title, code, purpose..."
+                  placeholder="Search by title, purpose, program..."
                   value={filters.search}
                   onChange={(e) =>
                     setFilters((prev) => ({ ...prev, search: e.target.value }))
@@ -862,22 +1075,20 @@ export default function PetCash() {
                   Mine only
                 </label>
 
-                <div className="flex gap-3">
-                  <button
-                    type="submit"
-                    className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-800"
-                  >
-                    Apply
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleResetFilters}
-                    className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-                  >
-                    Reset
-                  </button>
-                </div>
-              </form>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFilters({
+                      search: "",
+                      status: "",
+                      mine: false,
+                    })
+                  }
+                  className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Reset
+                </button>
+              </div>
             </div>
 
             <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
@@ -896,16 +1107,36 @@ export default function PetCash() {
                 <div className="p-6 text-sm font-medium text-slate-500">
                   Loading requests...
                 </div>
-              ) : requests.length === 0 ? (
+              ) : filteredRequests.length === 0 ? (
                 <div className="p-6 text-sm font-medium text-slate-500">
                   No pet cash requests found.
                 </div>
               ) : (
                 <div className="divide-y divide-slate-200">
-                  {requests.map((item) => {
-                    const isPending =
-                      String(item?.status || "").toLowerCase() === "pending";
+                  {filteredRequests.map((item) => {
+                    const isPending = normalizeStatus(item?.status) === "pending";
                     const busy = actionId === item.id;
+                    const stats = findProgramStatsForRequest(item, programStats);
+
+                    const feePerStudent = toNumber(
+                      item?.program?.fee_per_student ||
+                        item?.program?.price ||
+                        stats?.feePerStudent
+                    );
+
+                    const acceptedCount = toNumber(
+                      item?.program?.accepted_students_count || stats?.acceptedCount
+                    );
+
+                    const programBalance = toNumber(
+                      item?.program?.current_balance || stats?.currentBalance
+                    );
+
+                    const balanceAfter =
+                      item?.balance_after !== null &&
+                      item?.balance_after !== undefined
+                        ? toNumber(item.balance_after)
+                        : programBalance - toNumber(item?.amount);
 
                     return (
                       <div key={item.id} className="p-5">
@@ -932,10 +1163,10 @@ export default function PetCash() {
                             <div className="mt-3 grid grid-cols-1 gap-3 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-3">
                               <div>
                                 <span className="font-bold text-slate-800">Program:</span>{" "}
-                                {item?.program?.name || "-"}
+                                {item?.program?.name || stats?.name || "-"}
                               </div>
                               <div>
-                                <span className="font-bold text-slate-800">Amount:</span>{" "}
+                                <span className="font-bold text-slate-800">Request Amount:</span>{" "}
                                 {formatMoney(item?.amount || 0, item?.currency || "RWF")}
                               </div>
                               <div>
@@ -943,25 +1174,24 @@ export default function PetCash() {
                                 {item?.requested_by?.name || "-"}
                               </div>
                               <div>
-                                <span className="font-bold text-slate-800">Requested at:</span>{" "}
-                                {formatDateTime(item?.requested_at || item?.created_at)}
+                                <span className="font-bold text-slate-800">Fee per student:</span>{" "}
+                                {formatMoney(feePerStudent, item?.currency || "RWF")}
+                              </div>
+                              <div>
+                                <span className="font-bold text-slate-800">Accepted students:</span>{" "}
+                                {acceptedCount}
                               </div>
                               <div>
                                 <span className="font-bold text-slate-800">Program balance:</span>{" "}
-                                {item?.program?.current_balance !== null &&
-                                item?.program?.current_balance !== undefined
-                                  ? formatMoney(
-                                      item.program.current_balance,
-                                      item?.currency || "RWF"
-                                    )
-                                  : "-"}
+                                {formatMoney(programBalance, item?.currency || "RWF")}
                               </div>
                               <div>
-                                <span className="font-bold text-slate-800">Balance after:</span>{" "}
-                                {item?.balance_after !== null &&
-                                item?.balance_after !== undefined
-                                  ? formatMoney(item.balance_after, item?.currency || "RWF")
-                                  : "-"}
+                                <span className="font-bold text-slate-800">Balance after request:</span>{" "}
+                                {formatMoney(balanceAfter, item?.currency || "RWF")}
+                              </div>
+                              <div>
+                                <span className="font-bold text-slate-800">Requested at:</span>{" "}
+                                {formatDateTime(item?.requested_at || item?.created_at)}
                               </div>
                             </div>
 
@@ -1089,4 +1319,19 @@ export default function PetCash() {
       </div>
     </div>
   );
+}
+
+async function apiGet(url) {
+  const response = await fetch(url, {
+    method: "GET",
+    headers: buildHeaders(),
+  });
+
+  const payload = await readJson(response);
+
+  if (!response.ok || payload.success === false) {
+    throw new Error(extractErrorMessage(payload, "Request failed."));
+  }
+
+  return payload;
 }
