@@ -242,6 +242,8 @@ function buildProgramFinancials(programs, applications) {
     grouped.set(String(program.id), {
       id: String(program.id),
       programId: program.id,
+      intakeId: program?.intake_id || program?.intake?.id || "",
+      intakeName: program?.intake?.name || "",
       name: program?.name || program?.title || "Program",
       title: program?.name || program?.title || "Program",
       category: program?.category || "",
@@ -333,19 +335,6 @@ function SmallStat({ title, value, hint }) {
   );
 }
 
-function MiniMetric({ label, value }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-3">
-      <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
-        {label}
-      </div>
-      <div className="mt-2 text-sm font-bold text-slate-900">
-        {String(value || "-")}
-      </div>
-    </div>
-  );
-}
-
 export default function PetCash() {
   const API_BASE = normalizeApiBase();
 
@@ -354,6 +343,7 @@ export default function PetCash() {
   const canManage = role === "admin" || role === "ceo";
   const currentUserId = storedUser?.id;
 
+  const [intakes, setIntakes] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [applications, setApplications] = useState([]);
   const [requests, setRequests] = useState([]);
@@ -373,6 +363,7 @@ export default function PetCash() {
   });
 
   const [form, setForm] = useState({
+    intake_id: "",
     program_id: "",
     title: "",
     purpose: "",
@@ -384,7 +375,6 @@ export default function PetCash() {
   useEffect(() => {
     if (!canManage) return;
     loadPage();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canManage]);
 
   async function loadPage() {
@@ -394,21 +384,28 @@ export default function PetCash() {
     setNotice("");
 
     try {
-      const [programsRes, applicationsRes, requestsRes] = await Promise.all([
+      const [intakesRes, programsRes, applicationsRes, requestsRes] = await Promise.all([
+        apiGet(`${API_BASE}/intakes`),
         apiGet(`${API_BASE}/programs`),
         apiGet(`${API_BASE}/applications?per_page=100`),
         apiGet(`${API_BASE}/pet-cash-requests`),
       ]);
 
+      const loadedIntakes = extractCollection(intakesRes).filter(
+        (item) => item?.is_active !== false
+      );
+
       const loadedPrograms = extractCollection(programsRes).filter(
         (item) => !isArchivedProgram(item)
       );
 
+      setIntakes(loadedIntakes);
       setPrograms(loadedPrograms);
       setApplications(extractCollection(applicationsRes));
       setRequests(extractCollection(requestsRes));
     } catch (err) {
       setError(err?.message || "Failed to load pet cash data.");
+      setIntakes([]);
       setPrograms([]);
       setApplications([]);
       setRequests([]);
@@ -423,6 +420,19 @@ export default function PetCash() {
       String(a?.name || "").localeCompare(String(b?.name || ""))
     );
   }, [programs, applications]);
+
+  const intakeOptions = useMemo(() => {
+    return intakes.sort((a, b) =>
+      String(a?.name || "").localeCompare(String(b?.name || ""))
+    );
+  }, [intakes]);
+
+  const programsForSelectedIntake = useMemo(() => {
+    if (!form.intake_id) return [];
+    return programFinancials.filter(
+      (item) => String(item.intakeId || "") === String(form.intake_id)
+    );
+  }, [programFinancials, form.intake_id]);
 
   const selectedProgram = useMemo(() => {
     return (
@@ -500,6 +510,7 @@ export default function PetCash() {
 
   function resetForm() {
     setForm({
+      intake_id: "",
       program_id: "",
       title: "",
       purpose: "",
@@ -509,6 +520,14 @@ export default function PetCash() {
     });
   }
 
+  function handleIntakeChange(value) {
+    setForm((prev) => ({
+      ...prev,
+      intake_id: value,
+      program_id: "",
+    }));
+  }
+
   async function handleCreateRequest(e) {
     e.preventDefault();
     setSubmitting(true);
@@ -516,6 +535,10 @@ export default function PetCash() {
     setNotice("");
 
     try {
+      if (!form.intake_id) {
+        throw new Error("Please select an intake.");
+      }
+
       if (!form.program_id) {
         throw new Error("Please select a program.");
       }
@@ -709,8 +732,7 @@ export default function PetCash() {
                 Pet Cash Management
               </h1>
               <p className="mt-2 max-w-3xl text-sm text-white/85">
-                Program balance here now follows the same logic as Report:
-                accepted students × program fee.
+                Program balance follows the same logic as Report: accepted students × program fee.
               </p>
             </div>
 
@@ -782,18 +804,44 @@ export default function PetCash() {
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[400px_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-4">
               <h2 className="text-xl font-extrabold text-slate-900">
                 New Pet Cash Request
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                Create a request linked to a program.
+                Select intake first, then program.
               </p>
             </div>
 
             <form onSubmit={handleCreateRequest} className="space-y-4">
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Intake
+                </label>
+                <select
+                  value={form.intake_id}
+                  onChange={(e) => handleIntakeChange(e.target.value)}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  disabled={loadingPrograms || submitting}
+                >
+                  <option value="">
+                    {loadingPrograms
+                      ? "Loading intakes..."
+                      : intakeOptions.length
+                      ? "Select intake"
+                      : "No intake available"}
+                  </option>
+
+                  {intakeOptions.map((intake) => (
+                    <option key={intake.id} value={intake.id}>
+                      {intake.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="mb-2 block text-sm font-semibold text-slate-700">
                   Program
@@ -804,17 +852,17 @@ export default function PetCash() {
                     setForm((prev) => ({ ...prev, program_id: e.target.value }))
                   }
                   className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                  disabled={loadingPrograms || submitting}
+                  disabled={!form.intake_id || loadingPrograms || submitting}
                 >
                   <option value="">
-                    {loadingPrograms
-                      ? "Loading programs..."
-                      : programFinancials.length
+                    {!form.intake_id
+                      ? "Select intake first"
+                      : programsForSelectedIntake.length
                       ? "Select program"
-                      : "No available program"}
+                      : "No program in this intake"}
                   </option>
 
-                  {programFinancials.map((program) => (
+                  {programsForSelectedIntake.map((program) => (
                     <option key={program.programId} value={program.programId}>
                       {program.name}
                     </option>
@@ -829,6 +877,11 @@ export default function PetCash() {
                   </div>
 
                   <div className="mt-3 space-y-2 text-sm text-slate-700">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold">Intake</span>
+                      <span>{selectedProgram.intakeName || "-"}</span>
+                    </div>
+
                     <div className="flex items-center justify-between gap-3">
                       <span className="font-semibold">Program</span>
                       <span>{selectedProgram.name || "-"}</span>
@@ -1088,6 +1141,10 @@ export default function PetCash() {
                               <div>
                                 <span className="font-bold text-slate-800">Program:</span>{" "}
                                 {item?.program?.name || programData?.name || "-"}
+                              </div>
+                              <div>
+                                <span className="font-bold text-slate-800">Intake:</span>{" "}
+                                {programData?.intakeName || item?.program?.intake?.name || "-"}
                               </div>
                               <div>
                                 <span className="font-bold text-slate-800">Amount:</span>{" "}
