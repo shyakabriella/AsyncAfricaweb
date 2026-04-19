@@ -19,6 +19,7 @@ import {
   DollarSign,
   Loader2,
   RefreshCw,
+  Pencil,
 } from "lucide-react";
 
 const API_BASE_URL =
@@ -368,6 +369,7 @@ function RoleUsersTable({
   role,
   users,
   actionLoadingId,
+  openEditModal,
   openSalaryModal,
   openAttendanceModal,
   toggleStatus,
@@ -527,6 +529,16 @@ function RoleUsersTable({
 
                 <td className="px-4 py-4">
                   <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openEditModal(user)}
+                      disabled={actionLoadingId === user.id}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/[0.05] text-white transition hover:bg-[#6050F0] disabled:opacity-50"
+                      title="Edit user"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+
                     {user.role === "trainer" ? (
                       <>
                         <button
@@ -585,7 +597,8 @@ export default function User() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [openModal, setOpenModal] = useState(false);
+  const [userModalOpen, setUserModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
   const [salaryModalOpen, setSalaryModalOpen] = useState(false);
   const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
@@ -810,13 +823,34 @@ export default function User() {
   }
 
   function openCreateModal() {
+    setEditingUser(null);
     resetForm();
     setSuccessMessage("");
-    setOpenModal(true);
+    setUserModalOpen(true);
   }
 
-  function closeCreateModal() {
-    setOpenModal(false);
+  function openEditModal(user) {
+    setEditingUser(user);
+    setForm({
+      firstName: user.firstName || "",
+      lastName: user.lastName || "",
+      email: user.email || "",
+      phone: user.phone || "",
+      role: user.role || "student",
+      status: user.status || "active",
+      programIds: Array.isArray(user.programs)
+        ? user.programs.map((program) => program.id).filter(Boolean)
+        : [],
+      dailyRate: user.role === "trainer" ? String(user.dailyRate || "") : "",
+    });
+    setErrors({});
+    setSuccessMessage("");
+    setUserModalOpen(true);
+  }
+
+  function closeUserModal() {
+    setUserModalOpen(false);
+    setEditingUser(null);
     resetForm();
   }
 
@@ -894,7 +928,8 @@ export default function User() {
       form.email.trim() &&
       users.some(
         (u) =>
-          String(u.email || "").toLowerCase() === form.email.trim().toLowerCase()
+          String(u.email || "").toLowerCase() === form.email.trim().toLowerCase() &&
+          u.id !== editingUser?.id
       );
 
     if (emailExists) {
@@ -903,7 +938,12 @@ export default function User() {
 
     const phoneValue = form.phone.trim();
     const phoneExists =
-      phoneValue && users.some((u) => String(u.phone || "").trim() === phoneValue);
+      phoneValue &&
+      users.some(
+        (u) =>
+          String(u.phone || "").trim() === phoneValue &&
+          u.id !== editingUser?.id
+      );
 
     if (phoneExists) {
       nextErrors.phone = "This phone already exists";
@@ -921,7 +961,78 @@ export default function User() {
     return Object.keys(nextErrors).length === 0;
   }
 
-  async function handleCreateUser(e) {
+  function mapUserValidationErrors(validation, fallbackMessage) {
+    const nextErrors = {};
+
+    if (validation?.name?.[0]) {
+      nextErrors.firstName = validation.name[0];
+    }
+    if (validation?.email?.[0]) {
+      nextErrors.email = validation.email[0];
+    }
+    if (validation?.phone?.[0]) {
+      nextErrors.phone = validation.phone[0];
+    }
+    if (validation?.role_slug?.[0]) {
+      nextErrors.role = validation.role_slug[0];
+    }
+    if (validation?.program_ids?.[0]) {
+      nextErrors.programIds = validation.program_ids[0];
+    }
+    if (validation?.daily_rate?.[0]) {
+      nextErrors.dailyRate = validation.daily_rate[0];
+    }
+    if (validation?.status?.[0]) {
+      nextErrors.status = validation.status[0];
+    }
+
+    nextErrors.submit = fallbackMessage;
+    return nextErrors;
+  }
+
+  function buildUserPayload() {
+    return {
+      name: `${form.firstName.trim()} ${form.lastName.trim()}`.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim() || null,
+      role_slug: form.role,
+      status: form.status,
+      program_ids: form.programIds,
+      daily_rate: form.role === "trainer" ? Number(form.dailyRate || 0) : 0,
+    };
+  }
+
+  async function handleCreateUser() {
+    const result = await apiRequest("/users", {
+      method: "POST",
+      body: JSON.stringify(buildUserPayload()),
+    });
+
+    const emailMessage =
+      result?.data?.email_setup_message ||
+      result?.email_setup_message ||
+      "User created successfully. Account setup email has been sent.";
+
+    closeUserModal();
+    await loadInitialData();
+    setSuccessMessage(emailMessage);
+  }
+
+  async function handleUpdateUser() {
+    if (!editingUser?.id) return;
+
+    await apiRequest(`/users/${editingUser.id}`, {
+      method: "PATCH",
+      body: JSON.stringify(buildUserPayload()),
+    });
+
+    const userName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
+    closeUserModal();
+    await loadInitialData();
+    setSuccessMessage(`${userName || "User"} updated successfully.`);
+  }
+
+  async function handleSubmitUser(e) {
     e.preventDefault();
 
     if (!validateForm()) return;
@@ -931,48 +1042,20 @@ export default function User() {
       setErrors((prev) => ({ ...prev, submit: "" }));
       setSuccessMessage("");
 
-      const payload = {
-        name: `${form.firstName.trim()} ${form.lastName.trim()}`.trim(),
-        email: form.email.trim(),
-        phone: form.phone.trim() || null,
-        role_slug: form.role,
-        status: form.status,
-        program_ids: form.programIds,
-        daily_rate: form.role === "trainer" ? Number(form.dailyRate || 0) : 0,
-      };
-
-      const result = await apiRequest("/users", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-
-      const createdUser = normalizeUser(result?.data?.user || result?.data || {});
-      const emailMessage =
-        result?.data?.email_setup_message ||
-        result?.email_setup_message ||
-        "User created successfully. Account setup email has been sent.";
-
-      setUsers((prev) => [createdUser, ...prev]);
-      closeCreateModal();
-      setSuccessMessage(emailMessage);
-      await loadInitialData();
+      if (editingUser) {
+        await handleUpdateUser();
+      } else {
+        await handleCreateUser();
+      }
     } catch (error) {
       const validation = error?.validation || {};
-      const nextErrors = {};
-
-      if (validation?.name?.[0]) nextErrors.firstName = validation.name[0];
-      if (validation?.email?.[0]) nextErrors.email = validation.email[0];
-      if (validation?.phone?.[0]) nextErrors.phone = validation.phone[0];
-      if (validation?.role_slug?.[0]) nextErrors.role = validation.role_slug[0];
-      if (validation?.program_ids?.[0]) {
-        nextErrors.programIds = validation.program_ids[0];
-      }
-      if (validation?.daily_rate?.[0]) {
-        nextErrors.dailyRate = validation.daily_rate[0];
-      }
-
-      nextErrors.submit = error.message || "Could not create user.";
-      setErrors(nextErrors);
+      setErrors(
+        mapUserValidationErrors(
+          validation,
+          error.message ||
+            (editingUser ? "Could not update user." : "Could not create user.")
+        )
+      );
     } finally {
       setSaving(false);
     }
@@ -1141,8 +1224,8 @@ export default function User() {
                 User Management
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-white/70">
-                Create, manage, activate, assign programs, set trainer salary,
-                and now view users grouped clearly by role.
+                Create, update, manage, activate, assign programs, set trainer
+                salary, and view users grouped clearly by role.
               </p>
             </div>
 
@@ -1302,6 +1385,7 @@ export default function User() {
                 role={section.role}
                 users={section.users}
                 actionLoadingId={actionLoadingId}
+                openEditModal={openEditModal}
                 openSalaryModal={openSalaryModal}
                 openAttendanceModal={openAttendanceModal}
                 toggleStatus={toggleStatus}
@@ -1479,25 +1563,30 @@ export default function User() {
         </motion.div>
       </div>
 
-      <Modal open={openModal}>
+      <Modal open={userModalOpen}>
         <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
           <div>
             <p className="text-xs uppercase tracking-[0.22em] text-[#b7afff]">
-              Create Platform User
+              {editingUser ? "Update Platform User" : "Create Platform User"}
             </p>
-            <h2 className="mt-1 text-xl font-black text-white">New User</h2>
+            <h2 className="mt-1 text-xl font-black text-white">
+              {editingUser ? "Edit User" : "New User"}
+            </h2>
           </div>
 
           <button
             type="button"
-            onClick={closeCreateModal}
+            onClick={closeUserModal}
             className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.06] text-white transition hover:bg-white/[0.12]"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <form onSubmit={handleCreateUser} className="max-h-[calc(90vh-80px)] overflow-y-auto px-5 py-5">
+        <form
+          onSubmit={handleSubmitUser}
+          className="max-h-[calc(90vh-80px)] overflow-y-auto px-5 py-5"
+        >
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="mb-2 block text-sm font-medium text-white/80">
@@ -1620,6 +1709,9 @@ export default function User() {
                   Suspended
                 </option>
               </select>
+              {errors.status ? (
+                <p className="mt-2 text-xs text-rose-300">{errors.status}</p>
+              ) : null}
             </div>
 
             {form.role === "trainer" ? (
@@ -1684,7 +1776,7 @@ export default function User() {
           <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <button
               type="button"
-              onClick={closeCreateModal}
+              onClick={closeUserModal}
               className="inline-flex h-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] px-5 text-sm font-bold text-white transition hover:bg-white/[0.08]"
             >
               Cancel
@@ -1695,8 +1787,14 @@ export default function User() {
               disabled={saving}
               className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-[#6050F0] px-5 text-sm font-bold text-white transition hover:bg-[#7567ff] disabled:opacity-60"
             >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-              Create User
+              {saving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : editingUser ? (
+                <Pencil className="h-4 w-4" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
+              {editingUser ? "Update User" : "Create User"}
             </button>
           </div>
         </form>
