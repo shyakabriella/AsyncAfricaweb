@@ -197,9 +197,29 @@ function statusClasses(status) {
   return "bg-amber-100 text-amber-700 border border-amber-200";
 }
 
+function normalizeProgramStatus(program) {
+  return String(
+    program?.status ??
+      program?.program_status ??
+      program?.state ??
+      program?.program?.status ??
+      ""
+  )
+    .trim()
+    .toLowerCase();
+}
+
 function isSelectableProgram(program) {
-  const status = String(program?.status || "").trim().toLowerCase();
-  return !["archived", "cashed", "cash"].includes(status);
+  const status = normalizeProgramStatus(program);
+
+  return ![
+    "archived",
+    "archive",
+    "cashed",
+    "cash",
+    "inactive",
+    "closed",
+  ].includes(status);
 }
 
 function SmallStat({ title, value, hint }) {
@@ -274,10 +294,9 @@ export default function PetCash() {
     };
   }, [requests, summary]);
 
-  const selectablePrograms = useMemo(
-    () => programs.filter(isSelectableProgram),
-    [programs]
-  );
+  const selectablePrograms = useMemo(() => {
+    return programs.filter(isSelectableProgram);
+  }, [programs]);
 
   useEffect(() => {
     if (!canManage) return;
@@ -286,6 +305,18 @@ export default function PetCash() {
     fetchRequests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canManage]);
+
+  useEffect(() => {
+    if (!form.program_id) return;
+
+    const stillExists = selectablePrograms.some(
+      (program) => String(program?.id) === String(form.program_id)
+    );
+
+    if (!stillExists) {
+      setForm((prev) => ({ ...prev, program_id: "" }));
+    }
+  }, [form.program_id, selectablePrograms]);
 
   async function fetchPrograms() {
     setLoadingPrograms(true);
@@ -312,10 +343,18 @@ export default function PetCash() {
         throw new Error(extractErrorMessage(payload, "Failed to load programs."));
       }
 
-      const data = Array.isArray(payload?.data) ? payload.data : [];
-      setPrograms(data);
+      const rawData = Array.isArray(payload?.data)
+        ? payload.data
+        : Array.isArray(payload)
+        ? payload
+        : [];
+
+      const cleanedPrograms = rawData.filter(isSelectableProgram);
+
+      setPrograms(cleanedPrograms);
     } catch (err) {
       setError(err.message || "Failed to load programs.");
+      setPrograms([]);
     } finally {
       setLoadingPrograms(false);
     }
@@ -413,6 +452,7 @@ export default function PetCash() {
       setNotice(payload?.message || "Pet cash request created successfully.");
       resetForm();
       await fetchRequests();
+      await fetchPrograms();
     } catch (err) {
       setError(err.message || "Failed to create pet cash request.");
     } finally {
@@ -451,6 +491,7 @@ export default function PetCash() {
 
       setNotice(payload?.message || "Pet cash request approved successfully.");
       await fetchRequests();
+      await fetchPrograms();
     } catch (err) {
       setError(err.message || "Failed to approve pet cash request.");
     } finally {
@@ -494,6 +535,7 @@ export default function PetCash() {
 
       setNotice(payload?.message || "Pet cash request rejected successfully.");
       await fetchRequests();
+      await fetchPrograms();
     } catch (err) {
       setError(err.message || "Failed to reject pet cash request.");
     } finally {
@@ -528,6 +570,7 @@ export default function PetCash() {
 
       setNotice(payload?.message || "Pet cash request deleted successfully.");
       await fetchRequests();
+      await fetchPrograms();
     } catch (err) {
       setError(err.message || "Failed to delete pet cash request.");
     } finally {
@@ -580,7 +623,10 @@ export default function PetCash() {
 
             <button
               type="button"
-              onClick={() => fetchRequests()}
+              onClick={() => {
+                fetchPrograms();
+                fetchRequests();
+              }}
               className="inline-flex items-center justify-center rounded-2xl bg-white px-4 py-3 text-sm font-bold text-indigo-700 transition hover:bg-indigo-50"
             >
               Refresh List
@@ -650,13 +696,14 @@ export default function PetCash() {
                   <option value="">
                     {loadingPrograms
                       ? "Loading programs..."
-                      : selectablePrograms.length
+                      : selectablePrograms.length > 0
                       ? "Select program"
-                      : "No active program available"}
+                      : "No available program"}
                   </option>
+
                   {selectablePrograms.map((program) => (
                     <option key={program.id} value={program.id}>
-                      {program.name}
+                      {program.name || program.title || `Program #${program.id}`}
                     </option>
                   ))}
                 </select>
@@ -777,7 +824,10 @@ export default function PetCash() {
                 </p>
               </div>
 
-              <form onSubmit={handleApplyFilters} className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_180px_auto_auto]">
+              <form
+                onSubmit={handleApplyFilters}
+                className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_180px_auto_auto]"
+              >
                 <input
                   type="text"
                   placeholder="Search by title, code, purpose..."
