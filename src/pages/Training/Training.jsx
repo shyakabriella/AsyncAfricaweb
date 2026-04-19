@@ -332,14 +332,22 @@ export default function Training() {
     };
   }, []);
 
-  const programCount = useMemo(() => programs.length, [programs]);
-  const activeCount = useMemo(
-    () => programs.filter((item) => item.status === "Active").length,
+  const visiblePrograms = useMemo(
+    () => programs.filter((item) => item.status !== "Archived"),
     [programs]
   );
+
+  const programCount = useMemo(() => visiblePrograms.length, [visiblePrograms]);
+
+  const activeCount = useMemo(
+    () => visiblePrograms.filter((item) => item.status === "Active").length,
+    [visiblePrograms]
+  );
+
   const categoryCount = useMemo(
-    () => new Set(programs.map((item) => item.category).filter(Boolean)).size,
-    [programs]
+    () =>
+      new Set(visiblePrograms.map((item) => item.category).filter(Boolean)).size,
+    [visiblePrograms]
   );
 
   return (
@@ -475,7 +483,7 @@ export default function Training() {
           </div>
         ) : (
           <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {programs.map((item) => (
+            {visiblePrograms.map((item) => (
               <ProgramCard
                 key={item.id || item.slug}
                 item={item}
@@ -490,7 +498,7 @@ export default function Training() {
           </div>
         )}
 
-        {!loading && !error && programs.length === 0 ? (
+        {!loading && !error && visiblePrograms.length === 0 ? (
           <div className="mt-10 rounded-2xl border border-white/10 bg-white/[0.05] px-6 py-10 text-center backdrop-blur-xl">
             <h3 className="text-xl font-bold text-white">No training programs yet</h3>
             <p className="mt-3 text-sm leading-7 text-gray-300">
