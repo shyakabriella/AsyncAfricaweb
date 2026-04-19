@@ -58,6 +58,10 @@ function getTitle(path, role) {
     return "Agent Details";
   }
 
+  if (path.includes("/dashboard/intakes")) {
+    return "Intake Management";
+  }
+
   if (path.includes("/dashboard/programs")) {
     return normalizedRole === "trainer"
       ? "Training Programs"
@@ -120,6 +124,7 @@ function isAdminAllowedPath(path) {
     path === "/dashboard/phone" ||
     path === "/dashboard/call" ||
     path.startsWith("/dashboard/agents") ||
+    path.startsWith("/dashboard/intakes") ||
     path.startsWith("/dashboard/programs") ||
     path.startsWith("/dashboard/applications") ||
     path.startsWith("/dashboard/internaship") ||
@@ -152,6 +157,14 @@ function isCeoAllowedPath(path) {
     path === "/dashboard/phone" ||
     path === "/dashboard/call" ||
     path.startsWith("/dashboard/agents") ||
+    path.startsWith("/dashboard/intakes") ||
+    path.startsWith("/dashboard/programs") ||
+    path.startsWith("/dashboard/applications") ||
+    path.startsWith("/dashboard/internaship") ||
+    path.startsWith("/dashboard/internship") ||
+    path.startsWith("/dashboard/users") ||
+    path.startsWith("/dashboard/service-directory") ||
+    path.startsWith("/dashboard/settings") ||
     path.startsWith("/dashboard/report") ||
     path.startsWith("/dashboard/reports") ||
     path.startsWith("/dashboard/pet-cash")
@@ -217,7 +230,8 @@ export default function DashboardLayouts() {
 
   const { token, role: currentRole } = getAuthState();
   const normalizedRole = normalizeRole(currentRole);
-  const isAdmin = normalizedRole === "admin";
+  const canUseEmailPopup =
+    normalizedRole === "admin" || normalizedRole === "ceo";
   const isPhonePage =
     location.pathname === "/dashboard/phone" ||
     location.pathname === "/dashboard/call";
@@ -363,7 +377,7 @@ export default function DashboardLayouts() {
         </main>
 
         <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3 print:hidden">
-          {isAdmin && (
+          {canUseEmailPopup && (
             <button
               type="button"
               onClick={() => setShowEmailModal(true)}
