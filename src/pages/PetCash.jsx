@@ -197,29 +197,9 @@ function statusClasses(status) {
   return "bg-amber-100 text-amber-700 border border-amber-200";
 }
 
-function normalizeProgramStatus(program) {
-  return String(
-    program?.status ??
-      program?.program_status ??
-      program?.state ??
-      program?.program?.status ??
-      ""
-  )
-    .trim()
-    .toLowerCase();
-}
-
 function isSelectableProgram(program) {
-  const status = normalizeProgramStatus(program);
-
-  return ![
-    "archived",
-    "archive",
-    "cashed",
-    "cash",
-    "inactive",
-    "closed",
-  ].includes(status);
+  const status = String(program?.status || "").trim().toLowerCase();
+  return status !== "archived";
 }
 
 function SmallStat({ title, value, hint }) {
@@ -294,9 +274,16 @@ export default function PetCash() {
     };
   }, [requests, summary]);
 
-  const selectablePrograms = useMemo(() => {
-    return programs.filter(isSelectableProgram);
-  }, [programs]);
+  const selectablePrograms = useMemo(
+    () => programs.filter(isSelectableProgram),
+    [programs]
+  );
+
+  const selectedProgram = useMemo(() => {
+    return selectablePrograms.find(
+      (item) => String(item?.id) === String(form.program_id)
+    ) || null;
+  }, [selectablePrograms, form.program_id]);
 
   useEffect(() => {
     if (!canManage) return;
@@ -306,52 +293,29 @@ export default function PetCash() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canManage]);
 
-  useEffect(() => {
-    if (!form.program_id) return;
-
-    const stillExists = selectablePrograms.some(
-      (program) => String(program?.id) === String(form.program_id)
-    );
-
-    if (!stillExists) {
-      setForm((prev) => ({ ...prev, program_id: "" }));
-    }
-  }, [form.program_id, selectablePrograms]);
-
   async function fetchPrograms() {
     setLoadingPrograms(true);
     setError("");
 
     try {
-      let response = await fetch(`${API_BASE}/users-program-options`, {
+      const response = await fetch(`${API_BASE}/programs`, {
         method: "GET",
         headers: buildHeaders(),
       });
 
-      let payload = await readJson(response);
-
-      if (!response.ok || payload.success === false) {
-        response = await fetch(`${API_BASE}/programs`, {
-          method: "GET",
-          headers: buildHeaders(),
-        });
-
-        payload = await readJson(response);
-      }
+      const payload = await readJson(response);
 
       if (!response.ok || payload.success === false) {
         throw new Error(extractErrorMessage(payload, "Failed to load programs."));
       }
 
-      const rawData = Array.isArray(payload?.data)
+      const data = Array.isArray(payload?.data)
         ? payload.data
         : Array.isArray(payload)
         ? payload
         : [];
 
-      const cleanedPrograms = rawData.filter(isSelectableProgram);
-
-      setPrograms(cleanedPrograms);
+      setPrograms(data.filter(isSelectableProgram));
     } catch (err) {
       setError(err.message || "Failed to load programs.");
       setPrograms([]);
@@ -696,18 +660,57 @@ export default function PetCash() {
                   <option value="">
                     {loadingPrograms
                       ? "Loading programs..."
-                      : selectablePrograms.length > 0
+                      : selectablePrograms.length
                       ? "Select program"
                       : "No available program"}
                   </option>
-
                   {selectablePrograms.map((program) => (
                     <option key={program.id} value={program.id}>
-                      {program.name || program.title || `Program #${program.id}`}
+                      {program.name}
                     </option>
                   ))}
                 </select>
               </div>
+
+              {selectedProgram ? (
+                <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
+                  <div className="text-xs font-extrabold uppercase tracking-wide text-indigo-600">
+                    Selected Program Balance
+                  </div>
+
+                  <div className="mt-3 space-y-2 text-sm text-slate-700">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold">Program</span>
+                      <span>{selectedProgram?.name || "-"}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold">Fee per student</span>
+                      <span>{formatMoney(selectedProgram?.fee_per_student || selectedProgram?.price || 0, "RWF")}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold">Accepted students</span>
+                      <span>{Number(selectedProgram?.accepted_students_count || 0)}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold">Current balance</span>
+                      <span className="font-extrabold text-indigo-700">
+                        {formatMoney(selectedProgram?.current_balance || 0, "RWF")}
+                      </span>
+                    </div>
+
+                    <div className="rounded-xl bg-white px-3 py-2 text-xs text-slate-600">
+                      Formula: {Number(selectedProgram?.accepted_students_count || 0)} ×{" "}
+                      {formatMoney(selectedProgram?.fee_per_student || selectedProgram?.price || 0, "RWF")} ={" "}
+                      <span className="font-bold text-slate-800">
+                        {formatMoney(selectedProgram?.current_balance || 0, "RWF")}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               <div>
                 <label className="mb-2 block text-sm font-semibold text-slate-700">
@@ -824,10 +827,7 @@ export default function PetCash() {
                 </p>
               </div>
 
-              <form
-                onSubmit={handleApplyFilters}
-                className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_180px_auto_auto]"
-              >
+              <form onSubmit={handleApplyFilters} className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_180px_auto_auto]">
                 <input
                   type="text"
                   placeholder="Search by title, code, purpose..."
