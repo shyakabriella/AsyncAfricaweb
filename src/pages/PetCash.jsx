@@ -179,17 +179,7 @@ function toNumber(value) {
 }
 
 function formatMoney(value, currency = "RWF") {
-  const amount = toNumber(value);
-
-  try {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency,
-      maximumFractionDigits: 2,
-    }).format(amount);
-  } catch {
-    return `${amount.toLocaleString()} ${currency}`;
-  }
+  return `${new Intl.NumberFormat().format(toNumber(value))} ${currency}`;
 }
 
 function formatDateTime(value) {
@@ -199,10 +189,6 @@ function formatDateTime(value) {
   if (Number.isNaN(date.getTime())) return String(value);
 
   return date.toLocaleString();
-}
-
-function isArchivedProgram(program) {
-  return normalizeStatus(program?.status) === "archived";
 }
 
 function statusClasses(status) {
@@ -219,6 +205,10 @@ function statusClasses(status) {
   return "bg-amber-100 text-amber-700 border border-amber-200";
 }
 
+function isArchivedProgram(program) {
+  return normalizeStatus(program?.status) === "archived";
+}
+
 function createProgramLookup(programs) {
   const byId = new Map();
   const bySlug = new Map();
@@ -230,108 +220,104 @@ function createProgramLookup(programs) {
     }
 
     if (program?.slug) {
-      bySlug.set(normalizeText(program.slug), program);
+      bySlug.set(String(program.slug).toLowerCase(), program);
     }
 
-    [program?.name, program?.title, program?.program_title]
-      .filter(Boolean)
-      .forEach((name) => {
-        byTitle.set(normalizeText(name), program);
-      });
+    const names = [program?.name, program?.title, program?.program_title];
+    names.filter(Boolean).forEach((name) => {
+      byTitle.set(normalizeText(name), program);
+    });
   });
 
   return { byId, bySlug, byTitle };
 }
 
-function resolveProgramFromApplication(application, lookup) {
-  return (
-    lookup.byId.get(String(application?.program_id || application?.program?.id || "")) ||
-    lookup.bySlug.get(normalizeText(application?.program_slug || application?.program?.slug || "")) ||
-    lookup.byTitle.get(
-      normalizeText(
-        application?.program_title ||
-          application?.program?.title ||
-          application?.program?.name ||
-          ""
-      )
-    ) ||
-    null
-  );
-}
-
-function buildProgramStats(programs, applications) {
+function buildProgramFinancials(programs, applications) {
   const lookup = createProgramLookup(programs);
-  const map = new Map();
+  const grouped = new Map();
 
   programs.forEach((program) => {
-    const id = String(program.id);
+    if (isArchivedProgram(program)) return;
 
-    map.set(id, {
-      ...program,
-      totalApplications: 0,
+    grouped.set(String(program.id), {
+      id: String(program.id),
+      programId: program.id,
+      name: program?.name || program?.title || "Program",
+      title: program?.name || program?.title || "Program",
+      category: program?.category || "",
+      status: program?.status || "Active",
+      price: toNumber(program?.price || 0),
       acceptedCount: 0,
+      totalApplications: 0,
       pendingCount: 0,
-      rejectedCount: 0,
       reviewedCount: 0,
+      rejectedCount: 0,
       waitlistedCount: 0,
-      currentBalance: 0,
-      totalCollected: 0,
       applications: [],
     });
   });
 
-  applications.forEach((application) => {
-    const matchedProgram = resolveProgramFromApplication(application, lookup);
-    if (!matchedProgram) return;
-    if (isArchivedProgram(matchedProgram)) return;
+  applications.forEach((item) => {
+    const matchedProgram =
+      lookup.byId.get(String(item?.program_id || item?.program?.id || "")) ||
+      lookup.bySlug.get(
+        normalizeText(item?.program_slug || item?.program?.slug || "")
+      ) ||
+      lookup.byTitle.get(
+        normalizeText(
+          item?.program_title ||
+            item?.program?.title ||
+            item?.program?.name ||
+            ""
+        )
+      );
 
-    const id = String(matchedProgram.id);
-    const existing = map.get(id);
+    if (!matchedProgram || isArchivedProgram(matchedProgram)) return;
 
-    if (!existing) return;
+    const key = String(matchedProgram.id);
+    const group = grouped.get(key);
+    if (!group) return;
 
-    const status = normalizeStatus(application?.status);
+    const status = normalizeStatus(item?.status);
 
-    existing.totalApplications += 1;
-    existing.applications.push(application);
+    group.totalApplications += 1;
+    group.applications.push(item);
 
-    if (status === "accepted") existing.acceptedCount += 1;
-    if (status === "pending") existing.pendingCount += 1;
-    if (status === "rejected") existing.rejectedCount += 1;
-    if (status === "reviewed") existing.reviewedCount += 1;
-    if (status === "waitlisted") existing.waitlistedCount += 1;
+    if (status === "accepted") group.acceptedCount += 1;
+    if (status === "pending") group.pendingCount += 1;
+    if (status === "reviewed") group.reviewedCount += 1;
+    if (status === "rejected") group.rejectedCount += 1;
+    if (status === "waitlisted") group.waitlistedCount += 1;
   });
 
-  return Array.from(map.values())
-    .map((program) => {
-      const price = toNumber(program?.price || 0);
-      const currentBalance = price * toNumber(program.acceptedCount);
+  return Array.from(grouped.values()).map((group) => {
+    const totalEarned = toNumber(group.acceptedCount) * toNumber(group.price);
 
-      return {
-        ...program,
-        feePerStudent: price,
-        currentBalance,
-        totalCollected: currentBalance,
-      };
-    })
-    .sort((a, b) =>
-      String(a?.name || "").localeCompare(String(b?.name || ""))
-    );
+    return {
+      ...group,
+      feePerStudent: toNumber(group.price),
+      currentBalance: totalEarned,
+      totalEarned,
+    };
+  });
 }
 
-function findProgramStatsForRequest(item, programStats) {
-  const lookup = createProgramLookup(programStats);
-
+function findProgramFinancial(requestItem, programFinancials) {
   return (
-    lookup.byId.get(String(item?.program_id || item?.program?.id || "")) ||
-    lookup.bySlug.get(normalizeText(item?.program?.slug || item?.program_slug || "")) ||
-    lookup.byTitle.get(
-      normalizeText(
-        item?.program?.name ||
-          item?.program?.title ||
-          item?.program_title ||
-          ""
-      )
+    programFinancials.find(
+      (program) =>
+        String(program.programId) ===
+        String(requestItem?.program_id || requestItem?.program?.id || "")
+    ) ||
+    programFinancials.find(
+      (program) =>
+        normalizeText(program.name) ===
+        normalizeText(
+          requestItem?.program?.name ||
+            requestItem?.program?.title ||
+            requestItem?.program_title ||
+            ""
+        )
     ) ||
     null
   );
@@ -347,49 +333,15 @@ function SmallStat({ title, value, hint }) {
   );
 }
 
-function ProgramSummaryCard({ item, onSelect }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(item)}
-      className="rounded-3xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-indigo-300 hover:bg-indigo-50"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-base font-extrabold text-slate-900">
-            {item?.name || "Program"}
-          </h3>
-          <p className="mt-1 text-sm text-slate-500">
-            {item?.category || "No category"}
-          </p>
-        </div>
-
-        <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-700">
-          {item?.status || "Active"}
-        </span>
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <MiniMetric label="Fee" value={formatMoney(item?.feePerStudent || 0)} />
-        <MiniMetric label="Accepted" value={item?.acceptedCount || 0} />
-        <MiniMetric label="Applications" value={item?.totalApplications || 0} />
-        <MiniMetric label="Balance" value={formatMoney(item?.currentBalance || 0)} />
-      </div>
-
-      <p className="mt-3 text-xs font-semibold text-indigo-600">
-        Click to select this program
-      </p>
-    </button>
-  );
-}
-
 function MiniMetric({ label, value }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+    <div className="rounded-2xl border border-slate-200 bg-white p-3">
       <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
         {label}
       </div>
-      <div className="mt-2 text-sm font-bold text-slate-900">{String(value || "-")}</div>
+      <div className="mt-2 text-sm font-bold text-slate-900">
+        {String(value || "-")}
+      </div>
     </div>
   );
 }
@@ -444,18 +396,19 @@ export default function PetCash() {
     try {
       const [programsRes, applicationsRes, requestsRes] = await Promise.all([
         apiGet(`${API_BASE}/programs`),
-        apiGet(`${API_BASE}/applications?per_page=1000`),
+        apiGet(`${API_BASE}/applications?per_page=100`),
         apiGet(`${API_BASE}/pet-cash-requests`),
       ]);
 
-      const allPrograms = extractCollection(programsRes);
-      const activePrograms = allPrograms.filter((program) => !isArchivedProgram(program));
+      const loadedPrograms = extractCollection(programsRes).filter(
+        (item) => !isArchivedProgram(item)
+      );
 
-      setPrograms(activePrograms);
+      setPrograms(loadedPrograms);
       setApplications(extractCollection(applicationsRes));
       setRequests(extractCollection(requestsRes));
     } catch (err) {
-      setError(err?.message || "Failed to load pet cash page.");
+      setError(err?.message || "Failed to load pet cash data.");
       setPrograms([]);
       setApplications([]);
       setRequests([]);
@@ -465,79 +418,81 @@ export default function PetCash() {
     }
   }
 
-  const programStats = useMemo(() => {
-    return buildProgramStats(programs, applications);
+  const programFinancials = useMemo(() => {
+    return buildProgramFinancials(programs, applications).sort((a, b) =>
+      String(a?.name || "").localeCompare(String(b?.name || ""))
+    );
   }, [programs, applications]);
 
   const selectedProgram = useMemo(() => {
     return (
-      programStats.find((item) => String(item?.id) === String(form.program_id)) ||
-      null
+      programFinancials.find(
+        (item) => String(item.programId) === String(form.program_id)
+      ) || null
     );
-  }, [programStats, form.program_id]);
+  }, [programFinancials, form.program_id]);
 
-  const overallSummary = useMemo(() => {
-    const totalPrograms = programStats.length;
-    const totalAcceptedStudents = programStats.reduce(
-      (sum, item) => sum + toNumber(item?.acceptedCount),
-      0
-    );
-    const totalApplications = programStats.reduce(
-      (sum, item) => sum + toNumber(item?.totalApplications),
-      0
-    );
-    const totalBalance = programStats.reduce(
-      (sum, item) => sum + toNumber(item?.currentBalance),
-      0
-    );
-
+  const topSummary = useMemo(() => {
     return {
-      totalPrograms,
-      totalAcceptedStudents,
-      totalApplications,
-      totalBalance,
+      totalPrograms: programFinancials.length,
+      totalAccepted: programFinancials.reduce(
+        (sum, item) => sum + toNumber(item.acceptedCount),
+        0
+      ),
+      totalApplications: programFinancials.reduce(
+        (sum, item) => sum + toNumber(item.totalApplications),
+        0
+      ),
+      totalBalance: programFinancials.reduce(
+        (sum, item) => sum + toNumber(item.currentBalance),
+        0
+      ),
     };
-  }, [programStats]);
+  }, [programFinancials]);
 
   const requestSummary = useMemo(() => {
-    const totalRequested = requests.reduce(
-      (sum, item) => sum + toNumber(item?.amount),
-      0
-    );
-
-    const approvedRequested = requests
-      .filter((item) => normalizeStatus(item?.status) === "approved")
-      .reduce((sum, item) => sum + toNumber(item?.amount), 0);
-
     return {
       totalRequests: requests.length,
-      pending: requests.filter((item) => normalizeStatus(item?.status) === "pending").length,
-      approved: requests.filter((item) => normalizeStatus(item?.status) === "approved").length,
-      rejected: requests.filter((item) => normalizeStatus(item?.status) === "rejected").length,
-      totalRequested,
-      approvedRequested,
+      pending: requests.filter(
+        (item) => normalizeStatus(item?.status) === "pending"
+      ).length,
+      approved: requests.filter(
+        (item) => normalizeStatus(item?.status) === "approved"
+      ).length,
+      rejected: requests.filter(
+        (item) => normalizeStatus(item?.status) === "rejected"
+      ).length,
+      totalApprovedAmount: requests
+        .filter((item) => normalizeStatus(item?.status) === "approved")
+        .reduce((sum, item) => sum + toNumber(item?.amount), 0),
     };
   }, [requests]);
 
   const filteredRequests = useMemo(() => {
+    const search = normalizeText(filters.search);
+    const wantedStatus = normalizeStatus(filters.status);
+
     return requests.filter((item) => {
-      const search = normalizeText(filters.search);
-      const status = normalizeStatus(filters.status);
-      const itemStatus = normalizeStatus(item?.status);
+      const rowText = normalizeText(
+        [
+          item?.title,
+          item?.purpose,
+          item?.description,
+          item?.program?.name,
+          item?.program_title,
+          item?.requested_by?.name,
+          item?.code,
+        ]
+          .filter(Boolean)
+          .join(" ")
+      );
 
-      const haystack = normalizeText([
-        item?.title,
-        item?.purpose,
-        item?.description,
-        item?.program?.name,
-        item?.program_title,
-        item?.code,
-        item?.requested_by?.name,
-      ].filter(Boolean).join(" "));
-
-      const matchesSearch = !search || haystack.includes(search);
-      const matchesStatus = !status || itemStatus === status;
-      const matchesMine = !filters.mine || String(item?.requested_by?.id || "") === String(currentUserId || "");
+      const matchesSearch = !search || rowText.includes(search);
+      const matchesStatus =
+        !wantedStatus || normalizeStatus(item?.status) === wantedStatus;
+      const matchesMine =
+        !filters.mine ||
+        String(item?.requested_by?.id || "") === String(currentUserId || "");
 
       return matchesSearch && matchesStatus && matchesMine;
     });
@@ -554,13 +509,6 @@ export default function PetCash() {
     });
   }
 
-  function handleSelectProgram(program) {
-    setForm((prev) => ({
-      ...prev,
-      program_id: String(program?.id || ""),
-    }));
-  }
-
   async function handleCreateRequest(e) {
     e.preventDefault();
     setSubmitting(true);
@@ -568,9 +516,18 @@ export default function PetCash() {
     setNotice("");
 
     try {
-      if (!form.program_id) throw new Error("Please select a program.");
-      if (!form.title.trim()) throw new Error("Title is required.");
-      if (!form.purpose.trim()) throw new Error("Purpose is required.");
+      if (!form.program_id) {
+        throw new Error("Please select a program.");
+      }
+
+      if (!form.title.trim()) {
+        throw new Error("Title is required.");
+      }
+
+      if (!form.purpose.trim()) {
+        throw new Error("Purpose is required.");
+      }
+
       if (!form.amount || toNumber(form.amount) <= 0) {
         throw new Error("Amount must be greater than 0.");
       }
@@ -619,13 +576,16 @@ export default function PetCash() {
     setNotice("");
 
     try {
-      const response = await fetch(`${API_BASE}/pet-cash-requests/${item.id}/approve`, {
-        method: "POST",
-        headers: buildHeaders(true),
-        body: JSON.stringify({
-          approval_note: approvalNote,
-        }),
-      });
+      const response = await fetch(
+        `${API_BASE}/pet-cash-requests/${item.id}/approve`,
+        {
+          method: "POST",
+          headers: buildHeaders(true),
+          body: JSON.stringify({
+            approval_note: approvalNote,
+          }),
+        }
+      );
 
       const payload = await readJson(response);
 
@@ -662,13 +622,16 @@ export default function PetCash() {
     setNotice("");
 
     try {
-      const response = await fetch(`${API_BASE}/pet-cash-requests/${item.id}/reject`, {
-        method: "POST",
-        headers: buildHeaders(true),
-        body: JSON.stringify({
-          rejection_reason: rejectionReason.trim(),
-        }),
-      });
+      const response = await fetch(
+        `${API_BASE}/pet-cash-requests/${item.id}/reject`,
+        {
+          method: "POST",
+          headers: buildHeaders(true),
+          body: JSON.stringify({
+            rejection_reason: rejectionReason.trim(),
+          }),
+        }
+      );
 
       const payload = await readJson(response);
 
@@ -746,7 +709,8 @@ export default function PetCash() {
                 Pet Cash Management
               </h1>
               <p className="mt-2 max-w-3xl text-sm text-white/85">
-                Program balance is calculated from accepted students multiplied by the program fee.
+                Program balance here now follows the same logic as Report:
+                accepted students × program fee.
               </p>
             </div>
 
@@ -755,7 +719,7 @@ export default function PetCash() {
               onClick={loadPage}
               className="inline-flex items-center justify-center rounded-2xl bg-white px-4 py-3 text-sm font-bold text-indigo-700 transition hover:bg-indigo-50"
             >
-              Refresh Page
+              Refresh List
             </button>
           </div>
         </div>
@@ -775,22 +739,22 @@ export default function PetCash() {
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <SmallStat
             title="Programs"
-            value={overallSummary.totalPrograms}
-            hint="Active programs only"
+            value={topSummary.totalPrograms}
+            hint="Non-archived programs"
           />
           <SmallStat
             title="Accepted Students"
-            value={overallSummary.totalAcceptedStudents}
-            hint="Students counted as paid"
+            value={topSummary.totalAccepted}
+            hint="Counted from applications"
           />
           <SmallStat
             title="Applications"
-            value={overallSummary.totalApplications}
-            hint="All loaded applications"
+            value={topSummary.totalApplications}
+            hint="Loaded application records"
           />
           <SmallStat
             title="Total Balance"
-            value={formatMoney(overallSummary.totalBalance)}
+            value={formatMoney(topSummary.totalBalance)}
             hint="Accepted × fee"
           />
         </div>
@@ -813,51 +777,19 @@ export default function PetCash() {
           />
           <SmallStat
             title="Approved Amount"
-            value={formatMoney(requestSummary.approvedRequested)}
-            hint="Approved request money"
+            value={formatMoney(requestSummary.totalApprovedAmount)}
+            hint="Total approved money"
           />
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-4">
-            <h2 className="text-xl font-extrabold text-slate-900">
-              Program Financial Summary
-            </h2>
-            <p className="mt-1 text-sm text-slate-500">
-              This follows the same working logic as your report page:
-              accepted students × fee.
-            </p>
-          </div>
-
-          {loading ? (
-            <div className="py-10 text-center text-sm text-slate-500">
-              Loading program summary...
-            </div>
-          ) : programStats.length === 0 ? (
-            <div className="py-10 text-center text-sm text-slate-500">
-              No active programs found.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {programStats.map((item) => (
-                <ProgramSummaryCard
-                  key={item.id}
-                  item={item}
-                  onSelect={handleSelectProgram}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[400px_minmax(0,1fr)]">
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-4">
               <h2 className="text-xl font-extrabold text-slate-900">
                 New Pet Cash Request
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                Select a program and create a request.
+                Create a request linked to a program.
               </p>
             </div>
 
@@ -877,13 +809,13 @@ export default function PetCash() {
                   <option value="">
                     {loadingPrograms
                       ? "Loading programs..."
-                      : programStats.length
+                      : programFinancials.length
                       ? "Select program"
                       : "No available program"}
                   </option>
 
-                  {programStats.map((program) => (
-                    <option key={program.id} value={program.id}>
+                  {programFinancials.map((program) => (
+                    <option key={program.programId} value={program.programId}>
                       {program.name}
                     </option>
                   ))}
@@ -896,31 +828,36 @@ export default function PetCash() {
                     Selected Program Balance
                   </div>
 
-                  <div className="mt-3 grid grid-cols-2 gap-3">
-                    <MiniMetric
-                      label="Fee"
-                      value={formatMoney(selectedProgram.feePerStudent || 0)}
-                    />
-                    <MiniMetric
-                      label="Accepted"
-                      value={selectedProgram.acceptedCount || 0}
-                    />
-                    <MiniMetric
-                      label="Applications"
-                      value={selectedProgram.totalApplications || 0}
-                    />
-                    <MiniMetric
-                      label="Balance"
-                      value={formatMoney(selectedProgram.currentBalance || 0)}
-                    />
-                  </div>
+                  <div className="mt-3 space-y-2 text-sm text-slate-700">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold">Program</span>
+                      <span>{selectedProgram.name || "-"}</span>
+                    </div>
 
-                  <div className="mt-3 rounded-xl bg-white px-3 py-2 text-xs text-slate-600">
-                    Formula: {selectedProgram.acceptedCount || 0} ×{" "}
-                    {formatMoney(selectedProgram.feePerStudent || 0)} ={" "}
-                    <span className="font-bold text-slate-800">
-                      {formatMoney(selectedProgram.currentBalance || 0)}
-                    </span>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold">Fee per student</span>
+                      <span>{formatMoney(selectedProgram.price || 0)}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold">Accepted students</span>
+                      <span>{selectedProgram.acceptedCount || 0}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold">Current balance</span>
+                      <span className="font-extrabold text-indigo-700">
+                        {formatMoney(selectedProgram.totalEarned || 0)}
+                      </span>
+                    </div>
+
+                    <div className="rounded-xl bg-white px-3 py-2 text-xs text-slate-600">
+                      Formula: {selectedProgram.acceptedCount || 0} ×{" "}
+                      {formatMoney(selectedProgram.price || 0)} ={" "}
+                      <span className="font-bold text-slate-800">
+                        {formatMoney(selectedProgram.totalEarned || 0)}
+                      </span>
+                    </div>
                   </div>
                 </div>
               ) : null}
@@ -935,7 +872,7 @@ export default function PetCash() {
                   onChange={(e) =>
                     setForm((prev) => ({ ...prev, title: e.target.value }))
                   }
-                  placeholder="Example: Training materials purchase"
+                  placeholder="Example: Class materials purchase"
                   className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                   disabled={submitting}
                 />
@@ -1036,14 +973,14 @@ export default function PetCash() {
                   Filter Requests
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Search and narrow the request list.
+                  Search and narrow the list.
                 </p>
               </div>
 
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_180px_auto_auto]">
                 <input
                   type="text"
-                  placeholder="Search by title, purpose, program..."
+                  placeholder="Search by title, code, purpose..."
                   value={filters.search}
                   onChange={(e) =>
                     setFilters((prev) => ({ ...prev, search: e.target.value }))
@@ -1114,29 +1051,16 @@ export default function PetCash() {
               ) : (
                 <div className="divide-y divide-slate-200">
                   {filteredRequests.map((item) => {
-                    const isPending = normalizeStatus(item?.status) === "pending";
+                    const isPending =
+                      normalizeStatus(item?.status) === "pending";
                     const busy = actionId === item.id;
-                    const stats = findProgramStatsForRequest(item, programStats);
+                    const programData = findProgramFinancial(item, programFinancials);
 
-                    const feePerStudent = toNumber(
-                      item?.program?.fee_per_student ||
-                        item?.program?.price ||
-                        stats?.feePerStudent
-                    );
-
-                    const acceptedCount = toNumber(
-                      item?.program?.accepted_students_count || stats?.acceptedCount
-                    );
-
-                    const programBalance = toNumber(
-                      item?.program?.current_balance || stats?.currentBalance
-                    );
-
+                    const feePerStudent = toNumber(programData?.price || 0);
+                    const acceptedStudents = toNumber(programData?.acceptedCount || 0);
+                    const programBalance = toNumber(programData?.totalEarned || 0);
                     const balanceAfter =
-                      item?.balance_after !== null &&
-                      item?.balance_after !== undefined
-                        ? toNumber(item.balance_after)
-                        : programBalance - toNumber(item?.amount);
+                      programBalance - toNumber(item?.amount || 0);
 
                     return (
                       <div key={item.id} className="p-5">
@@ -1163,10 +1087,10 @@ export default function PetCash() {
                             <div className="mt-3 grid grid-cols-1 gap-3 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-3">
                               <div>
                                 <span className="font-bold text-slate-800">Program:</span>{" "}
-                                {item?.program?.name || stats?.name || "-"}
+                                {item?.program?.name || programData?.name || "-"}
                               </div>
                               <div>
-                                <span className="font-bold text-slate-800">Request Amount:</span>{" "}
+                                <span className="font-bold text-slate-800">Amount:</span>{" "}
                                 {formatMoney(item?.amount || 0, item?.currency || "RWF")}
                               </div>
                               <div>
@@ -1174,24 +1098,24 @@ export default function PetCash() {
                                 {item?.requested_by?.name || "-"}
                               </div>
                               <div>
+                                <span className="font-bold text-slate-800">Requested at:</span>{" "}
+                                {formatDateTime(item?.requested_at || item?.created_at)}
+                              </div>
+                              <div>
                                 <span className="font-bold text-slate-800">Fee per student:</span>{" "}
                                 {formatMoney(feePerStudent, item?.currency || "RWF")}
                               </div>
                               <div>
                                 <span className="font-bold text-slate-800">Accepted students:</span>{" "}
-                                {acceptedCount}
+                                {acceptedStudents}
                               </div>
                               <div>
                                 <span className="font-bold text-slate-800">Program balance:</span>{" "}
                                 {formatMoney(programBalance, item?.currency || "RWF")}
                               </div>
                               <div>
-                                <span className="font-bold text-slate-800">Balance after request:</span>{" "}
+                                <span className="font-bold text-slate-800">Balance after:</span>{" "}
                                 {formatMoney(balanceAfter, item?.currency || "RWF")}
-                              </div>
-                              <div>
-                                <span className="font-bold text-slate-800">Requested at:</span>{" "}
-                                {formatDateTime(item?.requested_at || item?.created_at)}
                               </div>
                             </div>
 
