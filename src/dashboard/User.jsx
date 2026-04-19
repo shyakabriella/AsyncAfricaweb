@@ -591,7 +591,7 @@ function RoleUsersTable({
   );
 }
 
-export default function User() {
+function User() {
   const [users, setUsers] = useState([]);
   const [programOptions, setProgramOptions] = useState([]);
   const [search, setSearch] = useState("");
@@ -1259,7 +1259,7 @@ export default function User() {
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
           <StatCard
             title="Total Users"
-            value={stats.total}
+            value={users.length}
             note="All registered users"
             icon={<Users className="h-5 w-5" />}
           />
@@ -1999,3 +1999,5 @@ export default function User() {
     </div>
   );
 }
+
+export default User;
