@@ -197,6 +197,11 @@ function statusClasses(status) {
   return "bg-amber-100 text-amber-700 border border-amber-200";
 }
 
+function isSelectableProgram(program) {
+  const status = String(program?.status || "").trim().toLowerCase();
+  return !["archived", "cashed", "cash"].includes(status);
+}
+
 function SmallStat({ title, value, hint }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -268,6 +273,11 @@ export default function PetCash() {
       total_approved_amount: totalApproved,
     };
   }, [requests, summary]);
+
+  const selectablePrograms = useMemo(
+    () => programs.filter(isSelectableProgram),
+    [programs]
+  );
 
   useEffect(() => {
     if (!canManage) return;
@@ -638,9 +648,13 @@ export default function PetCash() {
                   disabled={loadingPrograms || submitting}
                 >
                   <option value="">
-                    {loadingPrograms ? "Loading programs..." : "Select program"}
+                    {loadingPrograms
+                      ? "Loading programs..."
+                      : selectablePrograms.length
+                      ? "Select program"
+                      : "No active program available"}
                   </option>
-                  {programs.map((program) => (
+                  {selectablePrograms.map((program) => (
                     <option key={program.id} value={program.id}>
                       {program.name}
                     </option>
