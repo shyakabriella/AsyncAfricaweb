@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api";
@@ -21,8 +21,98 @@ function formatDateTime(value) {
   return date.toLocaleString();
 }
 
+function toDateTimeLocal(value) {
+  if (!value) return "";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function fromDateTimeLocal(value) {
+  if (!value) return null;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toISOString();
+}
+
 function normalizeText(value) {
   return String(value || "").trim();
+}
+
+function normalizeOptionValues(value) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      if (typeof item === "string") return item.trim();
+      if (item && typeof item === "object") {
+        return String(
+          item.value || item.label || item.name || item.title || ""
+        ).trim();
+      }
+      return "";
+    })
+    .filter(Boolean);
+}
+
+function normalizeShiftOptions(value) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((shift, index) => {
+      if (!shift || typeof shift !== "object") return null;
+
+      return {
+        id: String(shift.id || `shift_${index + 1}`),
+        name: shift.name || "",
+        start_time: shift.start_time || shift.startTime || "",
+        end_time: shift.end_time || shift.endTime || "",
+        capacity: Number(shift.capacity || shift.volume || 0),
+        filled: Number(
+          shift.filled || shift.enrolled || shift.current_students || 0
+        ),
+        available_slots:
+          shift.available_slots !== undefined
+            ? Number(shift.available_slots)
+            : Math.max(
+                Number(shift.capacity || shift.volume || 0) -
+                  Number(shift.filled || shift.enrolled || shift.current_students || 0),
+                0
+              ),
+        is_full: Boolean(
+          shift.is_full ||
+            shift.isFull ||
+            (Number(shift.capacity || shift.volume || 0) > 0 &&
+              Number(shift.filled || shift.enrolled || shift.current_students || 0) >=
+                Number(shift.capacity || shift.volume || 0))
+        ),
+      };
+    })
+    .filter(Boolean);
+}
+
+function normalizeProgram(program) {
+  if (!program || typeof program !== "object") return null;
+
+  return {
+    id: program.id,
+    title: program.title || program.name || "Untitled Program",
+    slug: program.slug || "",
+    skills: normalizeOptionValues(program.skills || []),
+    tools: normalizeOptionValues(program.tools || []),
+    experience_levels: normalizeOptionValues(program.experience_levels || []),
+    shifts: normalizeShiftOptions(program.shifts || []),
+  };
 }
 
 function getApplicantFullName(application) {
@@ -58,7 +148,7 @@ function InfoRow({ label, value }) {
   return (
     <div className="flex items-start justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
       <span className="text-xs font-medium text-slate-500">{label}</span>
-      <span className="max-w-[62%] break-words text-right text-xs font-semibold text-slate-900">
+      <span className="max-w-[62%] break-words text-right text-xs font-semibold text-slate-900 whitespace-pre-wrap">
         {value || "-"}
       </span>
     </div>
@@ -108,6 +198,22 @@ function EditField({ label, children }) {
   );
 }
 
+function ToggleChip({ active, children, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
+        active
+          ? "bg-[#6050F0] text-white"
+          : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 function getPatchErrorMessage(result, fallback) {
   if (result?.errors && typeof result.errors === "object") {
     const values = Object.values(result.errors).flat();
@@ -117,18 +223,13 @@ function getPatchErrorMessage(result, fallback) {
   return result?.message || fallback;
 }
 
-function buildUpdatedApplication(current, patchData) {
-  return {
-    ...current,
-    ...patchData,
-  };
-}
-
 function ApplicationDetails() {
   const { id } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
 
   const [application, setApplication] = useState(null);
+  const [programs, setPrograms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusLoading, setStatusLoading] = useState(false);
   const [updateLoading, setUpdateLoading] = useState(false);
@@ -140,10 +241,98 @@ function ApplicationDetails() {
   const [editError, setEditError] = useState("");
 
   const [form, setForm] = useState({
+    auth_provider: "",
+    program_id: "",
+    shift_id: "",
+    experience_level: "",
+    selected_skills: [],
+    selected_tools: [],
+
+    first_name: "",
+    last_name: "",
+    email: "",
+    phone: "",
+    country: "",
+    city: "",
+    date_of_birth: "",
+    gender: "",
+
+    education_level: "",
+    school_name: "",
+    field_of_study: "",
+
+    agree_terms: true,
+    agree_communication: true,
+
     status: "Pending",
+    admin_note: "",
+    submitted_at: "",
   });
 
-  async function fetchApplication() {
+  const forceEditMode = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get("mode") === "edit";
+  }, [location.search]);
+
+  async function fetchPrograms() {
+    const token = getAuthToken();
+
+    const response = await fetch(`${API_BASE_URL.replace(/\/+$/, "")}/programs`, {
+      headers: {
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(result?.message || "Failed to load programs.");
+    }
+
+    const rows = Array.isArray(result?.data?.data)
+      ? result.data.data
+      : Array.isArray(result?.data)
+      ? result.data
+      : Array.isArray(result)
+      ? result
+      : [];
+
+    return rows.map(normalizeProgram).filter(Boolean);
+  }
+
+  function fillFormFromApplication(row) {
+    setForm({
+      auth_provider: row?.auth_provider || "",
+      program_id: row?.program?.id ? String(row.program.id) : "",
+      shift_id: row?.shift?.id ? String(row.shift.id) : "",
+      experience_level: row?.experience_level || "",
+      selected_skills: Array.isArray(row?.selected_skills) ? row.selected_skills : [],
+      selected_tools: Array.isArray(row?.selected_tools) ? row.selected_tools : [],
+
+      first_name: row?.applicant?.first_name || "",
+      last_name: row?.applicant?.last_name || "",
+      email: row?.applicant?.email || "",
+      phone: row?.applicant?.phone || "",
+      country: row?.applicant?.country || "",
+      city: row?.applicant?.city || "",
+      date_of_birth: row?.applicant?.date_of_birth || "",
+      gender: row?.applicant?.gender || "",
+
+      education_level: row?.background?.education_level || "",
+      school_name: row?.background?.school_name || "",
+      field_of_study: row?.background?.field_of_study || "",
+
+      agree_terms: Boolean(row?.consents?.agree_terms),
+      agree_communication: Boolean(row?.consents?.agree_communication),
+
+      status: row?.status || "Pending",
+      admin_note: row?.admin_note || "",
+      submitted_at: toDateTimeLocal(row?.submitted_at),
+    });
+  }
+
+  async function fetchApplicationAndPrograms() {
     try {
       setLoading(true);
       setError("");
@@ -151,27 +340,30 @@ function ApplicationDetails() {
 
       const token = getAuthToken();
 
-      const response = await fetch(
-        `${API_BASE_URL.replace(/\/+$/, "")}/applications/${id}`,
-        {
+      const [applicationResponse, programsResult] = await Promise.all([
+        fetch(`${API_BASE_URL.replace(/\/+$/, "")}/applications/${id}`, {
           headers: {
             Accept: "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-        }
-      );
+        }),
+        fetchPrograms().catch(() => []),
+      ]);
 
-      const result = await response.json().catch(() => ({}));
+      const applicationResult = await applicationResponse.json().catch(() => ({}));
 
-      if (!response.ok) {
-        throw new Error(result?.message || "Failed to load application.");
+      if (!applicationResponse.ok) {
+        throw new Error(applicationResult?.message || "Failed to load application.");
       }
 
-      const row = result?.data || null;
+      const row = applicationResult?.data || null;
       setApplication(row);
-      setForm({
-        status: normalizeText(row?.status) || "Pending",
-      });
+      setPrograms(programsResult);
+      fillFormFromApplication(row);
+
+      if (forceEditMode) {
+        setEditMode(true);
+      }
     } catch (err) {
       setError(err?.message || "Could not load application.");
     } finally {
@@ -180,9 +372,68 @@ function ApplicationDetails() {
   }
 
   useEffect(() => {
-    fetchApplication();
+    fetchApplicationAndPrograms();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, forceEditMode]);
+
+  const currentProgram = useMemo(() => {
+    const selected = programs.find(
+      (program) => String(program?.id) === String(form.program_id)
+    );
+
+    if (selected) return selected;
+
+    return normalizeProgram(application?.program);
+  }, [programs, application, form.program_id]);
+
+  useEffect(() => {
+    if (!editMode || !currentProgram) return;
+
+    setForm((prev) => {
+      const allowedSkills = currentProgram.skills || [];
+      const allowedTools = currentProgram.tools || [];
+      const allowedExperience = currentProgram.experience_levels || [];
+      const allowedShifts = currentProgram.shifts || [];
+
+      const nextSkills = prev.selected_skills.filter((item) =>
+        allowedSkills.includes(item)
+      );
+      const nextTools = prev.selected_tools.filter((item) =>
+        allowedTools.includes(item)
+      );
+      const nextExperience = allowedExperience.includes(prev.experience_level)
+        ? prev.experience_level
+        : "";
+      const shiftExists = allowedShifts.some(
+        (shift) => String(shift.id) === String(prev.shift_id)
+      );
+
+      return {
+        ...prev,
+        selected_skills: nextSkills,
+        selected_tools: nextTools,
+        experience_level: nextExperience,
+        shift_id: shiftExists ? prev.shift_id : "",
+      };
+    });
+  }, [currentProgram, editMode]);
+
+  function updateForm(key, value) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function toggleArrayValue(key, value) {
+    setForm((prev) => {
+      const exists = prev[key].includes(value);
+
+      return {
+        ...prev,
+        [key]: exists
+          ? prev[key].filter((item) => item !== value)
+          : [...prev[key], value],
+      };
+    });
+  }
 
   async function patchApplication(payload, successText) {
     try {
@@ -211,11 +462,9 @@ function ApplicationDetails() {
         throw new Error(getPatchErrorMessage(result, "Update failed."));
       }
 
-      const updatedRow = result?.data || buildUpdatedApplication(application, payload);
+      const updatedRow = result?.data || null;
       setApplication(updatedRow);
-      setForm({
-        status: normalizeText(updatedRow?.status) || "Pending",
-      });
+      fillFormFromApplication(updatedRow);
       setSuccessMessage(successText);
       setEditMode(false);
       setEditError("");
@@ -238,7 +487,38 @@ function ApplicationDetails() {
       const token = getAuthToken();
 
       const payload = {
+        auth_provider: form.auth_provider || null,
+        program_id: form.program_id ? Number(form.program_id) : null,
+        shift_id: form.shift_id || null,
+        experience_level: form.experience_level || null,
+        selected_skills: form.selected_skills,
+        selected_tools: form.selected_tools,
+
+        applicant: {
+          first_name: form.first_name || null,
+          last_name: form.last_name || null,
+          email: form.email || null,
+          phone: form.phone || null,
+          country: form.country || null,
+          city: form.city || null,
+          date_of_birth: form.date_of_birth || null,
+          gender: form.gender || null,
+        },
+
+        background: {
+          education_level: form.education_level || null,
+          school_name: form.school_name || null,
+          field_of_study: form.field_of_study || null,
+        },
+
+        consents: {
+          agree_terms: Boolean(form.agree_terms),
+          agree_communication: Boolean(form.agree_communication),
+        },
+
         status: form.status,
+        admin_note: form.admin_note || null,
+        submitted_at: fromDateTimeLocal(form.submitted_at),
       };
 
       const response = await fetch(
@@ -260,11 +540,9 @@ function ApplicationDetails() {
         throw new Error(getPatchErrorMessage(result, "Update failed."));
       }
 
-      const updatedRow = result?.data || buildUpdatedApplication(application, payload);
+      const updatedRow = result?.data || null;
       setApplication(updatedRow);
-      setForm({
-        status: normalizeText(updatedRow?.status) || "Pending",
-      });
+      fillFormFromApplication(updatedRow);
       setSuccessMessage("Application updated successfully.");
       setEditMode(false);
     } catch (err) {
@@ -317,6 +595,7 @@ function ApplicationDetails() {
     patchApplication(
       {
         status: "Accepted",
+        admin_note: form.admin_note || application?.admin_note || null,
       },
       "Application approved successfully."
     );
@@ -326,6 +605,7 @@ function ApplicationDetails() {
     patchApplication(
       {
         status: "Rejected",
+        admin_note: form.admin_note || application?.admin_note || null,
       },
       "Application rejected successfully."
     );
@@ -335,6 +615,7 @@ function ApplicationDetails() {
     patchApplication(
       {
         status: "Reviewed",
+        admin_note: form.admin_note || application?.admin_note || null,
       },
       "Application marked as reviewed."
     );
@@ -344,6 +625,7 @@ function ApplicationDetails() {
     patchApplication(
       {
         status: "Waitlisted",
+        admin_note: form.admin_note || application?.admin_note || null,
       },
       "Application moved to waitlist."
     );
@@ -352,17 +634,13 @@ function ApplicationDetails() {
   function handleStartEdit() {
     setEditMode(true);
     setEditError("");
-    setForm({
-      status: normalizeText(application?.status) || "Pending",
-    });
+    fillFormFromApplication(application);
   }
 
   function handleCancelEdit() {
     setEditMode(false);
     setEditError("");
-    setForm({
-      status: normalizeText(application?.status) || "Pending",
-    });
+    fillFormFromApplication(application);
   }
 
   return (
@@ -486,44 +764,315 @@ function ApplicationDetails() {
                   </button>
                 </div>
               ) : (
-                <form onSubmit={handleSaveUpdate} className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <EditField label="Applicant">
-                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900">
-                        {getApplicantFullName(application)}
-                      </div>
-                    </EditField>
+                <form onSubmit={handleSaveUpdate} className="mt-5 space-y-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="grid gap-5 xl:grid-cols-2">
+                    <SectionCard title="Program & status">
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <EditField label="Program">
+                          <select
+                            value={form.program_id}
+                            onChange={(e) => updateForm("program_id", e.target.value)}
+                            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#7A6CF5]"
+                          >
+                            <option value="">Select program</option>
+                            {programs.map((program) => (
+                              <option key={program.id} value={program.id}>
+                                {program.title}
+                              </option>
+                            ))}
+                          </select>
+                        </EditField>
 
-                    <EditField label="Status">
-                      <select
-                        value={form.status}
-                        onChange={(e) =>
-                          setForm((prev) => ({ ...prev, status: e.target.value }))
-                        }
-                        className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#7A6CF5]"
-                      >
-                        <option value="Pending">Pending</option>
-                        <option value="Reviewed">Reviewed</option>
-                        <option value="Accepted">Accepted</option>
-                        <option value="Rejected">Rejected</option>
-                        <option value="Waitlisted">Waitlisted</option>
-                      </select>
-                    </EditField>
+                        <EditField label="Shift">
+                          <select
+                            value={form.shift_id}
+                            onChange={(e) => updateForm("shift_id", e.target.value)}
+                            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#7A6CF5]"
+                          >
+                            <option value="">No shift</option>
+                            {(currentProgram?.shifts || []).map((shift) => (
+                              <option key={shift.id} value={shift.id}>
+                                {shift.name}
+                                {shift.capacity
+                                  ? ` (${shift.filled}/${shift.capacity})`
+                                  : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </EditField>
+
+                        <EditField label="Experience Level">
+                          <select
+                            value={form.experience_level}
+                            onChange={(e) =>
+                              updateForm("experience_level", e.target.value)
+                            }
+                            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#7A6CF5]"
+                          >
+                            <option value="">Select level</option>
+                            {(currentProgram?.experience_levels || []).map((item) => (
+                              <option key={item} value={item}>
+                                {item}
+                              </option>
+                            ))}
+                          </select>
+                        </EditField>
+
+                        <EditField label="Status">
+                          <select
+                            value={form.status}
+                            onChange={(e) => updateForm("status", e.target.value)}
+                            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#7A6CF5]"
+                          >
+                            <option value="Pending">Pending</option>
+                            <option value="Reviewed">Reviewed</option>
+                            <option value="Accepted">Accepted</option>
+                            <option value="Rejected">Rejected</option>
+                            <option value="Waitlisted">Waitlisted</option>
+                          </select>
+                        </EditField>
+
+                        <EditField label="Auth Provider">
+                          <input
+                            type="text"
+                            value={form.auth_provider}
+                            onChange={(e) =>
+                              updateForm("auth_provider", e.target.value)
+                            }
+                            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#7A6CF5]"
+                          />
+                        </EditField>
+
+                        <EditField label="Submitted At">
+                          <input
+                            type="datetime-local"
+                            value={form.submitted_at}
+                            onChange={(e) =>
+                              updateForm("submitted_at", e.target.value)
+                            }
+                            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#7A6CF5]"
+                          />
+                        </EditField>
+                      </div>
+                    </SectionCard>
+
+                    <SectionCard title="Applicant details">
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <EditField label="First Name">
+                          <input
+                            type="text"
+                            value={form.first_name}
+                            onChange={(e) => updateForm("first_name", e.target.value)}
+                            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#7A6CF5]"
+                          />
+                        </EditField>
+
+                        <EditField label="Last Name">
+                          <input
+                            type="text"
+                            value={form.last_name}
+                            onChange={(e) => updateForm("last_name", e.target.value)}
+                            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#7A6CF5]"
+                          />
+                        </EditField>
+
+                        <EditField label="Email">
+                          <input
+                            type="email"
+                            value={form.email}
+                            onChange={(e) => updateForm("email", e.target.value)}
+                            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#7A6CF5]"
+                          />
+                        </EditField>
+
+                        <EditField label="Phone">
+                          <input
+                            type="text"
+                            value={form.phone}
+                            onChange={(e) => updateForm("phone", e.target.value)}
+                            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#7A6CF5]"
+                          />
+                        </EditField>
+
+                        <EditField label="Country">
+                          <input
+                            type="text"
+                            value={form.country}
+                            onChange={(e) => updateForm("country", e.target.value)}
+                            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#7A6CF5]"
+                          />
+                        </EditField>
+
+                        <EditField label="City">
+                          <input
+                            type="text"
+                            value={form.city}
+                            onChange={(e) => updateForm("city", e.target.value)}
+                            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#7A6CF5]"
+                          />
+                        </EditField>
+
+                        <EditField label="Date of Birth">
+                          <input
+                            type="date"
+                            value={form.date_of_birth}
+                            onChange={(e) =>
+                              updateForm("date_of_birth", e.target.value)
+                            }
+                            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#7A6CF5]"
+                          />
+                        </EditField>
+
+                        <EditField label="Gender">
+                          <input
+                            type="text"
+                            value={form.gender}
+                            onChange={(e) => updateForm("gender", e.target.value)}
+                            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#7A6CF5]"
+                          />
+                        </EditField>
+                      </div>
+                    </SectionCard>
+
+                    <SectionCard title="Academic background">
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <EditField label="Education Level">
+                          <input
+                            type="text"
+                            value={form.education_level}
+                            onChange={(e) =>
+                              updateForm("education_level", e.target.value)
+                            }
+                            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#7A6CF5]"
+                          />
+                        </EditField>
+
+                        <EditField label="School / Institution">
+                          <input
+                            type="text"
+                            value={form.school_name}
+                            onChange={(e) =>
+                              updateForm("school_name", e.target.value)
+                            }
+                            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#7A6CF5]"
+                          />
+                        </EditField>
+
+                        <div className="md:col-span-2">
+                          <EditField label="Field of Study">
+                            <input
+                              type="text"
+                              value={form.field_of_study}
+                              onChange={(e) =>
+                                updateForm("field_of_study", e.target.value)
+                              }
+                              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#7A6CF5]"
+                            />
+                          </EditField>
+                        </div>
+                      </div>
+                    </SectionCard>
+
+                    <SectionCard title="Selections & admin note">
+                      <div className="space-y-4">
+                        <EditField label="Selected Skills">
+                          <div className="flex flex-wrap gap-2">
+                            {(currentProgram?.skills || []).length ? (
+                              currentProgram.skills.map((skill) => (
+                                <ToggleChip
+                                  key={skill}
+                                  active={form.selected_skills.includes(skill)}
+                                  onClick={() =>
+                                    toggleArrayValue("selected_skills", skill)
+                                  }
+                                >
+                                  {skill}
+                                </ToggleChip>
+                              ))
+                            ) : (
+                              <span className="text-sm text-slate-500">
+                                No skills available for this program.
+                              </span>
+                            )}
+                          </div>
+                        </EditField>
+
+                        <EditField label="Selected Tools">
+                          <div className="flex flex-wrap gap-2">
+                            {(currentProgram?.tools || []).length ? (
+                              currentProgram.tools.map((tool) => (
+                                <ToggleChip
+                                  key={tool}
+                                  active={form.selected_tools.includes(tool)}
+                                  onClick={() =>
+                                    toggleArrayValue("selected_tools", tool)
+                                  }
+                                >
+                                  {tool}
+                                </ToggleChip>
+                              ))
+                            ) : (
+                              <span className="text-sm text-slate-500">
+                                No tools available for this program.
+                              </span>
+                            )}
+                          </div>
+                        </EditField>
+
+                        <EditField label="Admin Note">
+                          <textarea
+                            value={form.admin_note}
+                            onChange={(e) =>
+                              updateForm("admin_note", e.target.value)
+                            }
+                            rows={5}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#7A6CF5]"
+                            placeholder="Write note for this application..."
+                          />
+                        </EditField>
+                      </div>
+                    </SectionCard>
+
+                    <SectionCard title="Consents">
+                      <div className="space-y-3">
+                        <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={form.agree_terms}
+                            onChange={(e) =>
+                              updateForm("agree_terms", e.target.checked)
+                            }
+                          />
+                          Agree Terms
+                        </label>
+
+                        <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={form.agree_communication}
+                            onChange={(e) =>
+                              updateForm("agree_communication", e.target.checked)
+                            }
+                          />
+                          Agree Communication
+                        </label>
+                      </div>
+                    </SectionCard>
                   </div>
 
                   {editError ? (
-                    <div className="mt-4 whitespace-pre-line rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                    <div className="whitespace-pre-line rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                       {editError}
                     </div>
                   ) : null}
 
-                  <div className="mt-4 flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       type="submit"
                       disabled={updateLoading}
                       className="rounded-full bg-[#6050F0] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#7A6CF5] disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm"
                     >
-                      {updateLoading ? "Updating..." : "Save Update"}
+                      {updateLoading ? "Updating..." : "Save Full Update"}
                     </button>
 
                     <button
@@ -547,23 +1096,11 @@ function ApplicationDetails() {
                       label="Full Name"
                       value={getApplicantFullName(application)}
                     />
-                    <InfoRow
-                      label="Email"
-                      value={application?.applicant?.email}
-                    />
-                    <InfoRow
-                      label="Phone"
-                      value={application?.applicant?.phone}
-                    />
-                    <InfoRow
-                      label="Country"
-                      value={application?.applicant?.country}
-                    />
+                    <InfoRow label="Email" value={application?.applicant?.email} />
+                    <InfoRow label="Phone" value={application?.applicant?.phone} />
+                    <InfoRow label="Country" value={application?.applicant?.country} />
                     <InfoRow label="City" value={application?.applicant?.city} />
-                    <InfoRow
-                      label="Gender"
-                      value={application?.applicant?.gender}
-                    />
+                    <InfoRow label="Gender" value={application?.applicant?.gender} />
                     <InfoRow
                       label="Date of Birth"
                       value={application?.applicant?.date_of_birth}
@@ -600,12 +1137,11 @@ function ApplicationDetails() {
                       label="Program"
                       value={application?.program?.title || application?.program?.name}
                     />
-                    <InfoRow
-                      label="Program Slug"
-                      value={application?.program?.slug}
-                    />
+                    <InfoRow label="Program Slug" value={application?.program?.slug} />
                     <InfoRow label="Shift" value={application?.shift?.name} />
                     <InfoRow label="Status" value={application?.status} />
+                    <InfoRow label="Auth Provider" value={application?.auth_provider} />
+                    <InfoRow label="Admin Note" value={application?.admin_note} />
                   </div>
 
                   <div className="mt-4 grid gap-4">
