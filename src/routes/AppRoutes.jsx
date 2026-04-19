@@ -21,6 +21,7 @@ import Wallet from "../pages/Training/Wallet";
 import Projects from "../pages/Projects";
 import Contact from "../pages/Contact";
 import Report from "../pages/Report";
+import PetCash from "../pages/PetCash";
 
 import Program from "../dashboard/Program";
 import ProgramDetails from "../dashboard/ProgramDetails";
@@ -119,7 +120,10 @@ export default function AppRoutes() {
         </Route>
 
         <Route path="/support/phone" element={<WebPhonePage />} />
-        <Route path="/support/call" element={<Navigate to="/support/phone" replace />} />
+        <Route
+          path="/support/call"
+          element={<Navigate to="/support/phone" replace />}
+        />
 
         <Route
           path="/login"
@@ -328,6 +332,15 @@ export default function AppRoutes() {
           <Route
             path="reports"
             element={<Navigate to="/dashboard/report" replace />}
+          />
+
+          <Route
+            path="pet-cash"
+            element={
+              <RequireRole allowedRoles={["admin", "ceo"]}>
+                <PetCash />
+              </RequireRole>
+            }
           />
 
           <Route

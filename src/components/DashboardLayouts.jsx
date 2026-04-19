@@ -102,6 +102,10 @@ function getTitle(path, role) {
     return "Reports";
   }
 
+  if (path.includes("/dashboard/pet-cash")) {
+    return "Pet Cash Management";
+  }
+
   if (path.includes("/dashboard/agent")) {
     return "Agent Dashboard";
   }
@@ -124,7 +128,8 @@ function isAdminAllowedPath(path) {
     path.startsWith("/dashboard/service-directory") ||
     path.startsWith("/dashboard/settings") ||
     path.startsWith("/dashboard/report") ||
-    path.startsWith("/dashboard/reports")
+    path.startsWith("/dashboard/reports") ||
+    path.startsWith("/dashboard/pet-cash")
   );
 }
 
@@ -148,7 +153,8 @@ function isCeoAllowedPath(path) {
     path === "/dashboard/call" ||
     path.startsWith("/dashboard/agents") ||
     path.startsWith("/dashboard/report") ||
-    path.startsWith("/dashboard/reports")
+    path.startsWith("/dashboard/reports") ||
+    path.startsWith("/dashboard/pet-cash")
   );
 }
 
