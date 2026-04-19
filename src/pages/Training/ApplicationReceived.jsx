@@ -196,7 +196,13 @@ function ProgramSummaryCard({ program, active, onClick }) {
   );
 }
 
-function MobileApplicantCard({ application, onView, onDelete, deletingId }) {
+function MobileApplicantCard({
+  application,
+  onView,
+  onEdit,
+  onDelete,
+  deletingId,
+}) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -211,20 +217,28 @@ function MobileApplicantCard({ application, onView, onDelete, deletingId }) {
         {getProgramTitle(application)} • {getShiftTitle(application)}
       </div>
 
-      <div className="mt-4 flex gap-2">
+      <div className="mt-4 grid grid-cols-3 gap-2">
         <button
           type="button"
           onClick={onView}
-          className="flex-1 rounded-xl bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100"
+          className="rounded-xl bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100"
         >
           View
         </button>
 
         <button
           type="button"
+          onClick={onEdit}
+          className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700 transition hover:bg-amber-100"
+        >
+          Edit
+        </button>
+
+        <button
+          type="button"
           onClick={onDelete}
           disabled={deletingId === application.id}
-          className="flex-1 rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {deletingId === application.id ? "Deleting..." : "Delete"}
         </button>
@@ -273,6 +287,7 @@ function ShiftSection({
   navigate,
   deletingId,
   handleDelete,
+  openEditModal,
   isMobile = false,
   onPreviousPage,
   onNextPage,
@@ -302,6 +317,7 @@ function ShiftSection({
               application={application}
               deletingId={deletingId}
               onView={() => navigate(`/dashboard/applications/${application.id}`)}
+              onEdit={() => openEditModal(application)}
               onDelete={() => handleDelete(application.id)}
             />
           ))}
@@ -335,7 +351,7 @@ function ShiftSection({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[560px]">
+        <table className="w-full min-w-[640px]">
           <thead className="border-b border-slate-200 bg-white">
             <tr>
               <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
@@ -384,6 +400,17 @@ function ShiftSection({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
+                        openEditModal(application);
+                      }}
+                      className="rounded-lg bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-700 transition hover:bg-amber-100"
+                    >
+                      Edit
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
                         handleDelete(application.id);
                       }}
                       disabled={deletingId === application.id}
@@ -411,6 +438,89 @@ function ShiftSection({
   );
 }
 
+function EditApplicationModal({
+  open,
+  application,
+  form,
+  setForm,
+  saving,
+  error,
+  onClose,
+  onSubmit,
+}) {
+  if (!open || !application) return null;
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 px-4">
+      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+        <div className="border-b border-slate-200 px-5 py-4">
+          <h2 className="text-lg font-black text-slate-900">Update Application</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Change the application status directly from this page.
+          </p>
+        </div>
+
+        <form onSubmit={onSubmit} className="space-y-4 px-5 py-5">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+              Applicant
+            </p>
+            <p className="mt-1 text-sm font-bold text-slate-900">
+              {getApplicantName(application)}
+            </p>
+            <p className="mt-2 text-xs text-slate-500">
+              {getProgramTitle(application)} • {getShiftTitle(application)}
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+              Status
+            </label>
+            <select
+              value={form.status}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, status: e.target.value }))
+              }
+              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#7A6CF5]"
+            >
+              <option value="Pending">Pending</option>
+              <option value="Reviewed">Reviewed</option>
+              <option value="Accepted">Accepted</option>
+              <option value="Rejected">Rejected</option>
+              <option value="Waitlisted">Waitlisted</option>
+            </select>
+          </div>
+
+          {error ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {error}
+            </div>
+          ) : null}
+
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-xl bg-[#6050F0] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#7A6CF5] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {saving ? "Updating..." : "Update Application"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function ApplicationReceived() {
   const navigate = useNavigate();
 
@@ -419,6 +529,7 @@ export default function ApplicationReceived() {
   const [loading, setLoading] = useState(true);
   const [pageLoading, setPageLoading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [editSaving, setEditSaving] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [searchInput, setSearchInput] = useState("");
@@ -426,6 +537,11 @@ export default function ApplicationReceived() {
   const [statusFilter, setStatusFilter] = useState("");
   const [activeProgramId, setActiveProgramId] = useState("");
   const [shiftPages, setShiftPages] = useState({});
+  const [editingApplication, setEditingApplication] = useState(null);
+  const [editModalError, setEditModalError] = useState("");
+  const [editForm, setEditForm] = useState({
+    status: "Pending",
+  });
 
   const fetchApplications = useCallback(async ({ silent = false } = {}) => {
     try {
@@ -644,6 +760,76 @@ export default function ApplicationReceived() {
       programs: groupedPrograms.length,
     };
   }, [applications, groupedPrograms, totalApplications]);
+
+  function openEditModal(application) {
+    setEditingApplication(application);
+    setEditForm({
+      status: normalizeText(application?.status) || "Pending",
+    });
+    setEditModalError("");
+    setError("");
+    setSuccessMessage("");
+  }
+
+  function closeEditModal() {
+    setEditingApplication(null);
+    setEditForm({ status: "Pending" });
+    setEditModalError("");
+  }
+
+  async function handleUpdateApplication(e) {
+    e.preventDefault();
+
+    if (!editingApplication?.id) return;
+
+    try {
+      setEditSaving(true);
+      setEditModalError("");
+
+      const token = getAuthToken();
+
+      const response = await fetch(
+        `${API_BASE_URL.replace(/\/+$/, "")}/applications/${editingApplication.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            status: editForm.status,
+          }),
+        }
+      );
+
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(result?.message || "Failed to update application.");
+      }
+
+      const updatedRow =
+        result?.data && !Array.isArray(result.data) ? result.data : null;
+
+      setApplications((prev) =>
+        prev.map((item) =>
+          String(item.id) === String(editingApplication.id)
+            ? updatedRow
+              ? { ...item, ...updatedRow }
+              : { ...item, status: editForm.status }
+            : item
+        )
+      );
+
+      setSuccessMessage("Application updated successfully.");
+      closeEditModal();
+    } catch (err) {
+      setEditModalError(err?.message || "Could not update application.");
+    } finally {
+      setEditSaving(false);
+    }
+  }
 
   async function handleDelete(applicationId) {
     const confirmed = window.confirm(
@@ -913,6 +1099,7 @@ export default function ApplicationReceived() {
                         navigate={navigate}
                         deletingId={deletingId}
                         handleDelete={handleDelete}
+                        openEditModal={openEditModal}
                         isMobile
                         onPreviousPage={handlePreviousShiftPage}
                         onNextPage={handleNextShiftPage}
@@ -928,6 +1115,7 @@ export default function ApplicationReceived() {
                         navigate={navigate}
                         deletingId={deletingId}
                         handleDelete={handleDelete}
+                        openEditModal={openEditModal}
                         onPreviousPage={handlePreviousShiftPage}
                         onNextPage={handleNextShiftPage}
                       />
@@ -939,6 +1127,17 @@ export default function ApplicationReceived() {
           </div>
         )}
       </div>
+
+      <EditApplicationModal
+        open={Boolean(editingApplication)}
+        application={editingApplication}
+        form={editForm}
+        setForm={setEditForm}
+        saving={editSaving}
+        error={editModalError}
+        onClose={closeEditModal}
+        onSubmit={handleUpdateApplication}
+      />
     </div>
   );
 }
